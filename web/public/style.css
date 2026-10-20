@@ -42,6 +42,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 Inter, system-ui, sans-serif; }
 button { font: inherit; cursor: pointer; }
 .muted { color: var(--muted); }
@@ -123,6 +124,7 @@ button { font: inherit; cursor: pointer; }
 .note b { display: block; font-size: 12px; color: #5b6275; }
 .phone-cap { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
 .phone.ring-me { animation: buzz .3s 3; }
+.phone.waiting { box-shadow: 0 0 0 3px var(--brand), 0 0 28px var(--brand), 0 12px 40px #0004; }
 @keyframes buzz { 25% { transform: translateX(-3px) rotate(-1deg); } 75% { transform: translateX(3px) rotate(1deg); } }
 
 /* MCP wire */

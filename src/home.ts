@@ -81,6 +81,6 @@ export function offersFor(tool: string, data: any, done: Set<string>): Offer[] {
   if (tool === "stranded_help" && data?.hotel && !done.has("ride")) out.push({ key: "ride", ask: `Want me to get an Uber to the ${data.hotel.name}?`, run: () => ride(data.hotel.name) });
   if (tool === "stranded_help" && data?.needHotel && !done.has("hotel")) out.push({ key: "hotel", ask: "Want me to find a hotel near the airport on Expedia?", run: () => hotelSearch(data.city) });
   if (tool === "request_refund" && data?.expected && pickup?.contact && !done.has("text:refund"))
-    out.push({ key: "text:refund", ask: `Want me to let ${pickup.contact} know you're not flying today?`, run: () => textMessage(pickup.contact!, "Our flight was badly delayed, so we're not flying today after all. I'll call you tonight.") });
+    out.push({ key: "text:refund", ask: `Want me to let ${pickup.contact} know you're not flying today?`, run: () => textMessage(pickup.contact!, "Change of plans: our flight fell through, so we're not flying today after all. I'll call you tonight.") });
   return out;
 }

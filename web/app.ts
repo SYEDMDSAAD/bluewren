@@ -227,7 +227,7 @@ function openApp(url: string) {
   const phone = document.querySelector(".phone")!;
   phone.classList.remove("ring-me");
   void (phone as HTMLElement).offsetWidth;
-  phone.classList.add("ring-me");
+  phone.classList.add("ring-me", "waiting");
 }
 
 function closeApp() {
@@ -235,6 +235,7 @@ function closeApp() {
     appFrame.hidden = true;
     appFrame.removeAttribute("src");
     lock.hidden = false;
+    document.querySelector(".phone")!.classList.remove("waiting");
   }, 1500);
 }
 
@@ -287,6 +288,7 @@ async function playScene(name: string) {
   notes.replaceChildren(el("p", "muted", "Approvals, boarding passes and messages appear here."));
   appFrame.hidden = true;
   lock.hidden = false;
+  document.querySelector(".phone")!.classList.remove("waiting");
   welcome.hidden = true;
   add("t", `${state?.scenes[name] ?? name}…`);
   await fetch(`/demo/scene/${name}`, { method: "POST" });

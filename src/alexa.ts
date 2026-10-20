@@ -84,6 +84,8 @@ export class Conversation {
   private form?: { keys: string[]; resolve: (r: ElicitResult) => void };
   private running?: Promise<void>;
   private pending?: Pending;
+  /** An approval is open in the app on the user's phone. */
+  private onPhone = false;
   private offers: Offer[] = [];
   private done = new Set<string>();
   /** The numbered flights Alexa last read out, for "the 3:45" or "the Midway one". */
@@ -107,6 +109,7 @@ export class Conversation {
     client.setRequestHandler(ElicitRequestSchema, async (req) => {
       const p = req.params;
       if (p.mode === "url") {
+        this.onPhone = true;
         this.emit({ type: "mcp", dir: "in", text: `elicitation/create (url) ${new URL(p.url).pathname}` });
         this.emit({ type: "phone", url: p.url, text: p.message });
         this.emit({ type: "say", text: p.message });
@@ -163,6 +166,7 @@ export class Conversation {
 
   private finish() {
     this.running = undefined;
+    this.onPhone = false;
     this.emit({ type: "idle" });
   }
 
@@ -173,7 +177,7 @@ export class Conversation {
     const said = text.trim().replace(/^(alexa|ok alexa|hey alexa)[, ]*/i, "");
     if (this.form) return this.answerForm(said);
     if (this.running) {
-      this.emit({ type: "say", text: "One moment, I'm still on your last request." });
+      this.emit({ type: "say", text: this.onPhone ? "I'm waiting for you to approve it in the Bluewren app on your phone. Tap Approve there, or Decline to leave things as they are." : "One moment, I'm still on your last request." });
       return;
     }
     this.running = this.turn(said)
@@ -234,6 +238,7 @@ export class Conversation {
     this.emit({ type: "mcp", dir: "out", text: `tools/call ${name} ${JSON.stringify(args)}` });
     if (!quiet) this.emit({ type: "thinking", text: `Asking Bluewren (${name})…` });
     const res = await client.callTool({ name, arguments: args }, undefined, { timeout: 10 * 60_000, resetTimeoutOnProgress: true });
+    this.onPhone = false;
     const sc = res.structuredContent as { speech?: string; data?: unknown; next?: { tool: string; args: Record<string, unknown> } } | undefined;
     const speech = sc?.speech ?? (res.content as { type: string; text?: string }[]).find((c) => c.type === "text")?.text ?? "Sorry, something went wrong.";
     this.emit({ type: "mcp", dir: "in", text: `result ${name}: ${speech.slice(0, 80)}${speech.length > 80 ? "…" : ""}${sc?.next ? ` · next: ${sc.next.tool}` : ""}` });
