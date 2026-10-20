@@ -228,7 +228,13 @@ export class Conversation {
     if (ALEXA_ACTIONS.includes(choice.name)) return this.alexaAction(choice.name, choice.args);
     const r = await this.call(choice.name, choice.args);
     if (r) this.respond(choice.name, r);
-    // "…and also book a cab": the second request in the same sentence isn't dropped.
+    // "…and we need a hotel", "…and also book a cab": a second request in the same sentence isn't dropped.
+    if (r && choice.name !== "stranded_help" && /\b(hotel|stay the night|overnight|sleep|room)\b/i.test(text)) {
+      const p = this.pending as Pending | undefined; // set by the reply just given
+      if (p?.kind === "tool" && p.name === "stranded_help") this.pending = undefined;
+      const h = await this.call("stranded_help", {});
+      if (h) this.respond("stranded_help", h, false, !/\b(cab|uber|lyft|taxi|ride)\b/i.test(text));
+    }
     if (r && /\b(cab|uber|lyft|taxi|ride)\b/i.test(text)) await this.bookRide({});
   }
 
@@ -351,12 +357,24 @@ export class Conversation {
     const allowed = MCP_ACTIONS.includes(action) ? Object.keys(this.tools.find((t) => t.name === action)?.inputSchema.properties ?? {}) : ["contact", "message", "place"];
     const args = clean(Object.fromEntries(Object.entries(j).filter(([k]) => allowed.includes(k))));
     // A bag fee is only ever refunded, never "checked": that question is the refund itself.
-    const name = action === "refund_eligibility" && /\bbag fee\b/i.test(text) ? "request_refund" : action;
-    return { name, args: ground(name, args, text, this.options) };
+    let name = action === "refund_eligibility" && /\bbag fee\b/i.test(text) ? "request_refund" : action;
+    // Naming the time of a flight Alexa just listed picks it, whatever else the sentence asks.
+    if (name !== "rebook" && !["flight_status", "my_trips"].includes(name) && optionAt(text, this.options)) name = "rebook";
+    return { name, args: ground(name, name === action ? args : {}, text, this.options) };
   }
 }
 
 // "the second one" must not match "one": only ordinals, or a number after "option"/"number".
+/** An option whose departure time the user said: "the 6:30", "6 30 am", "630 am", "6 am". */
+export function optionAt<T extends { option: number; depLocal: string }>(text: string, options: T[]): T | undefined {
+  const t = text.toLowerCase();
+  const m = t.match(/\b(\d{1,2})(?:[: ]?(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)(?![a-z])/) ?? t.match(/\b(\d{1,2})[: ](\d{2})\b/);
+  if (!m) return undefined;
+  const at = `${Number(m[1])}:${m[2] ?? "00"}`;
+  const half = m[3] ? (m[3][0] === "a" ? "am" : "pm") : undefined;
+  return options.find((o) => o.depLocal.startsWith(`${at} `) && (!half || o.depLocal.endsWith(half)));
+}
+
 const ORDINALS: [RegExp, number][] = [[/\b(first|1st|(option|number) (1|one))\b/, 1], [/\b(second|2nd|(option|number) (2|two))\b/, 2], [/\b(third|3rd|(option|number) (3|three))\b/, 3], [/\b(fourth|4th|(option|number) (4|four))\b/, 4]];
 
 /**
@@ -380,14 +398,14 @@ export function ground(action: string, args: Record<string, unknown>, text: stri
   if (action === "rebook") {
     delete a.option;
     // A flight number said out loud is the flight wanted, wherever the model put it.
-    const num = t.match(/\b(\d{3,4})\b/)?.[1];
+    // "630 am" is a time, not flight 630.
+    const num = t.replace(/\b\d{3,4}\s*(a\.?m|p\.?m)\b/g, " ").match(/\b(\d{3,4})\b/)?.[1];
     if (num) {
       a.flight = num;
       if (a.trip === num) delete a.trip;
     }
     // "the 3:45", "the Midway one", "the second one"
-    const time = t.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?/);
-    const byTime = time && !/\d{3,4}/.test(t.replace(/:/g, "x")) ? options.find((o) => o.depLocal.startsWith(`${time[1]}:${time[2] ?? "00"}`) && (!time[3] || o.depLocal.endsWith(time[3][0] === "a" ? "am" : "pm"))) : undefined;
+    const byTime = num ? undefined : optionAt(text, options);
     const byAirport = /midway/.test(t) ? options.find((o) => o.toShort === "Midway") : /o'?hare/.test(t) ? options.find((o) => o.toShort === "O'Hare") : undefined;
     const ord = ORDINALS.find(([re]) => re.test(t))?.[1];
     const last = /\b(last|latest)\b/.test(t) ? options[options.length - 1]?.option : undefined;

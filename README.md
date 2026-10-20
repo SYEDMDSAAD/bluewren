@@ -77,7 +77,7 @@ npm test       # rule edges + end-to-end over MCP (41 checks)
 
 The demo page stands in for Alexa+. It is an MCP client that picks tools with a small local model ([Ollama](https://ollama.com), `qwen2.5-coder:7b` by default, set with `BW_MODEL`). It speaks with a natural voice (Kokoro), listens in Chrome, and shows the airline app on a phone. The panel on the right shows every MCP message.
 
-`npx tsx scripts/intent-check.ts` runs 24 everyday sentences through the local model. The latest run got 24 of 24 right with a median of 2.0 seconds on a laptop GPU. Those sentences were also used to tune the stand-in, so expect less on new phrasings; real Alexa+ does this part itself.
+`npx tsx scripts/intent-check.ts` runs 26 everyday sentences through the local model. The latest run got 26 of 26 right with a median of 2.9 seconds on a laptop GPU. Those sentences were also used to tune the stand-in, so expect less on new phrasings; real Alexa+ does this part itself.
 
 ## Layout
 

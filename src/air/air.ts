@@ -289,6 +289,8 @@ function overnight(t: Trip): boolean {
 export function completeRebook(plan: RebookPlan): Answer {
   const acct = load();
   const t = acct.trips.find((x) => x.conf === plan.conf)!;
+  const left = status(flightById(t.flightId));
+  t.movedBecause = { what: left.cancelled ? "cancellation" : "delay", cause: left.cause };
   t.original ??= t.flightId;
   t.flightId = plan.flightId;
   t.seats = Object.fromEntries(t.travelers.map((id, i) => [id, plan.seats[i]]));
@@ -300,7 +302,7 @@ export function completeRebook(plan: RebookPlan): Answer {
   const seats = plan.seats.length > 1 ? `seats ${list(plan.seats)}${plan.together ? "" : ", not together"}` : `seat ${plan.seats[0]}`;
   const bag = t.bags.length ? ` Your checked bag${t.bags.length > 1 ? "s move" : " moves"} with you.` : "";
   let speech = `Done. ${cap(party(t))} are on ${label(f)} at ${when(s.dep, airport(f.from).tz)}, ${seats}, landing at ${to.short} at ${timeSpoken(s.arr, to.tz)}.${bag} New boarding passes are in the Bluewren app.`;
-  const cause = status(flightById(t.original!)).cause;
+  const cause = t.movedBecause!.cause;
   let next: Answer["next"];
   if (overnight(t) && controllable(cause) && !acct.vouchers.some((v) => v.conf === t.conf && v.kind === "hotel")) {
     speech += " You'll be staying the night, and Bluewren covers your hotel. Want the details?";
@@ -427,8 +429,8 @@ export function strandedHelp(ref?: string): Answer {
   if (s.cancelled) return { speech: "Let's get you on a new flight first. Want to hear your options?", next: { tool: "rebooking_options", args: { trip: t.conf } } };
   const first = flightById(t.original ?? t.flightId);
   // What's keeping the traveler waiting now: a delay on this flight, or the cancellation of the first one.
-  const what = s.delay > 0 || !t.original ? "delay" : "cancellation";
-  const cause = what === "delay" ? s.cause : status(first).cause;
+  const why = s.delay > 0 || !t.original ? { what: "delay" as const, cause: s.cause } : t.movedBecause ?? { what: "cancellation" as const, cause: status(first).cause };
+  const { what, cause } = why;
   const wait = minutesBetween(first.dep, s.dep);
   const night = overnight(t);
   const city = airport(cur.from).city;

@@ -30,6 +30,8 @@ export interface Trip {
   status: "active" | "refunded" | "flown";
   /** The flight first booked, when Bluewren moved the trip to another one. */
   original?: string;
+  /** Why the traveler was last moved: the flight they left was cancelled or delayed, and the cause. */
+  movedBecause?: { what: "delay" | "cancellation"; cause?: "crew" | "mechanical" | "weather" };
   bookedAt: string;
 }
 

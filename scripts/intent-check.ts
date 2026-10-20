@@ -31,6 +31,8 @@ const CASES: [string, string, Record<string, unknown>?][] = [
   ["Put us on the 3:45", "rebook", { option: 3 }],
   ["Book the Midway one", "rebook", { option: 2 }],
   ["go for blueprint 416", "rebook", { flight: "416" }],
+  ["6 30 am tomorrow but I then need to stay for the night in the hotel", "rebook", { option: 4 }],
+  ["the 630 am one please", "rebook", { option: 4 }],
   ["Put us on Bluewren 1512", "rebook", { flight: "1512" }],
   ["Can I get my money back?", "refund_eligibility"],
   ["Am I owed a refund for this?", "refund_eligibility"],
@@ -53,6 +55,7 @@ await c.connect();
   { option: 1, depLocal: "1:20 pm", toShort: "O'Hare", flight: "Bluewren 416" },
   { option: 2, depLocal: "2:05 pm", toShort: "Midway", flight: "Bluewren 1512" },
   { option: 3, depLocal: "3:45 pm", toShort: "O'Hare", flight: "Bluewren 418" },
+  { option: 4, depLocal: "6:30 am", toShort: "O'Hare", flight: "Bluewren 402" },
 ];
 
 let right = 0;
