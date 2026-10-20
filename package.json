@@ -1,0 +1,28 @@
+{
+  "name": "bluewren",
+  "version": "0.1.0",
+  "description": "Bluewren Air on Alexa+: rebook, refund and get help when your flight is cancelled, by voice, through a self-hosted MCP server",
+  "type": "module",
+  "author": "Syed Mohammad Saad",
+  "license": "MIT",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "build:web": "esbuild web/app.ts --bundle --format=esm --platform=browser --minify --sourcemap --outfile=web/public/app.js",
+    "prestart": "npm run build:web",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p web",
+    "test": "tsx scripts/rules-check.ts && tsx scripts/mcp-check.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "express": "^5.3.0",
+    "kokoro-js": "^1.2.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.5",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}

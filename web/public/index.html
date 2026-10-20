@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bluewren on Alexa+</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">🐦</span>
+      <div><b>Bluewren Air</b> <span class="on">on Alexa+</span><small>Simulated Alexa+ · real MCP server · made-up airline</small></div>
+    </div>
+    <div class="top-actions">
+      <button type="button" class="ghost" id="howBtn">How it works</button>
+    </div>
+  </header>
+
+  <nav class="scenes" aria-label="Demo scenes">
+    <span class="muted">Airline operations (demo):</span>
+    <div id="sceneButtons"></div>
+  </nav>
+
+  <main class="stage">
+    <!-- The Alexa+ screen -->
+    <section class="echo" aria-label="Alexa">
+      <div class="screen">
+        <div class="welcome" id="welcome">
+          <div class="ring" aria-hidden="true"></div>
+          <h1>When your flight goes wrong, just talk.</h1>
+          <p>Pick a scene above. Bluewren tells Alexa the moment your flight changes, and Alexa gets you rebooked, refunded or a hotel for the night, and lets your family know.</p>
+          <div class="chips" id="chips"></div>
+        </div>
+        <ol class="chat" id="chat" aria-live="polite"></ol>
+      </div>
+      <form class="ask" id="ask">
+        <button type="button" class="mic" id="mic" aria-label="Speak" title="Speak (Chrome)">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z"/></svg>
+        </button>
+        <input id="say" autocomplete="off" placeholder="Say or type… e.g. Is my flight on time?" />
+        <button type="submit" class="send">Ask</button>
+      </form>
+      <div class="voice">
+        <label class="switch"><input type="checkbox" id="speak" checked /><span></span> Speak answers</label>
+        <label class="switch" title="After Alexa asks a question, listen for the answer"><input type="checkbox" id="converse" checked /><span></span> Listen for answers</label>
+        <select id="voice" aria-label="Voice"></select>
+        <span id="voiceStatus" class="muted"></span>
+      </div>
+    </section>
+
+    <!-- The traveler's phone: approvals in the Bluewren app, and messages -->
+    <aside class="phone-wrap" aria-label="Your phone">
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="phone-screen" id="phoneScreen">
+          <div class="lock" id="lock">
+            <div class="clock" id="clock"></div>
+            <div class="date" id="date"></div>
+            <div class="notes" id="notes"><p class="muted">Approvals, boarding passes and messages appear here.</p></div>
+          </div>
+          <iframe id="appFrame" title="Bluewren app" hidden></iframe>
+        </div>
+      </div>
+      <p class="phone-cap">Your phone · <span id="where">Austin</span></p>
+    </aside>
+
+    <!-- What goes over MCP -->
+    <aside class="wire" aria-label="MCP messages">
+      <h2>MCP messages <span class="muted">Alexa ⇄ Bluewren</span></h2>
+      <ol id="wire"></ol>
+    </aside>
+  </main>
+
+  <dialog class="sheet" id="how" aria-labelledby="how-title">
+    <form method="dialog"><button class="close" aria-label="Close">✕</button></form>
+    <h2 id="how-title">How Bluewren works with Alexa+</h2>
+    <ol class="flow">
+      <li><b>Bluewren is an MCP server</b> that an airline would run. Alexa+ connects to it over Streamable HTTP (MCP 2025-11-25) and gets 10 tools: trip alerts, my trips, flight status, rebooking options, rebook, refund eligibility, request refund, refund status, meals and hotel, and bag status.</li>
+      <li><b>Alexa speaks up first.</b> Alexa subscribes to the <code>bluewren://trips</code> resource. When operations cancel or delay a flight, the server sends <code>notifications/resources/updated</code>, and Alexa calls <code>trip_alerts</code> and tells you with the best next step, before you reach the airport.</li>
+      <li><b>Your rights, said plainly.</b> Since October 28, 2024, U.S. Department of Transportation rules give you a cash refund if the airline cancels your flight or delays it 3 hours or more and you choose not to fly, and a bag fee refund if your bag is more than 12 hours late on a domestic flight. Bluewren tells you when they apply.</li>
+      <li><b>Nothing changes without you.</b> Changes and refunds are approved in the Bluewren app on your phone through a URL elicitation; refunds are also confirmed by voice first through a form elicitation. A client that can't ask must call twice with a confirmation id.</li>
+      <li><b>Alexa+ does the rest.</b> Bluewren returns your new arrival time and hotel. Alexa uses them with its own services: texting whoever is picking you up, an Uber to the hotel, moving a meeting. In this demo those are simulated.</li>
+    </ol>
+    <h3>What's real and what's simulated</h3>
+    <ul>
+      <li><b>Real:</b> the MCP server and protocol features, 28 major U.S. airports with their time zones, and the DOT refund rules.</li>
+      <li><b>Simulated:</b> Bluewren Air itself (a made-up airline), its flights, seats, cancellations and refunds; and Alexa+, its voice, messages, Uber, Expedia and calendar. A small local model stands in for Alexa+'s understanding.</li>
+    </ul>
+  </dialog>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
