@@ -9,6 +9,7 @@ import {
   completeBagFeeRefund,
   completeRebook,
   completeTicketRefund,
+  findTrip,
   flightStatus,
   money,
   myTrips,
@@ -158,7 +159,13 @@ export function createServer(baseUrl: string): McpServer {
     },
     async (a, extra) => {
       const held = take<RebookPlan>(a.confirmation_id, "rebook");
-      const plan = held ?? planRebook(a.trip, a.option, a.flight);
+      // "416" sent as the trip is a flight number when no trip has it.
+      let { trip, flight } = a;
+      if (trip && /\d{3,4}/.test(trip) && !findTrip(trip)) {
+        flight ??= trip;
+        trip = undefined;
+      }
+      const plan = held ?? planRebook(trip, a.option, flight);
       if ("speech" in plan) return reply(plan);
       const sum = rebookSummary(plan);
       if (!held && !modes().url && !modes().form) return reply({ speech: `${sum.speech} Shall I?`, needs: "confirmation", data: { confirmation_id: hold("rebook", plan) } });

@@ -14,7 +14,8 @@ import { ElicitRequestSchema, LoggingMessageNotificationSchema, ResourceUpdatedN
 const PORT = 8899;
 const BASE = `http://localhost:${PORT}`;
 const state = fs.mkdtempSync(path.join(os.tmpdir(), "bluewren-"));
-const server = spawn("npx", ["tsx", "src/index.ts"], { env: { ...process.env, PORT: String(PORT), BW_STATE: state, BW_VOICE: "0", BW_SCENE_DELAY_MS: "100" }, stdio: ["ignore", "pipe", "inherit"] });
+if (await fetch(`http://localhost:${PORT}/health`).then(() => true, () => false)) throw new Error(`Something is already on port ${PORT}; stop it first.`);
+const server = spawn("npx", ["tsx", "src/index.ts"], { env: { ...process.env, PORT: String(PORT), BW_STATE: state, BW_VOICE: "0", BW_SCENE_DELAY_MS: "100" }, stdio: ["ignore", "pipe", "inherit"], detached: true });
 await new Promise<void>((resolve, reject) => {
   server.stdout!.on("data", (d) => String(d).includes("MCP server on") && resolve());
   server.on("exit", (c) => reject(new Error(`server exited ${c}`)));
@@ -88,6 +89,11 @@ try {
   const no = await call(alexa, "rebook", alert.next!.args);
   check("declining in the app changes nothing", /left your booking as it was/.test(no.speech), no.speech);
   approve = "approved";
+  const unknown = await call(alexa, "rebook", { flight: "999" });
+  check("a flight number that isn't offered is refused, not swapped", /Bluewren 999 isn't one of the flights/.test(unknown.speech), unknown.speech);
+  const asked416 = await call(alexa, "rebook", { flight: "416", trip: "416" });
+  check("flight 416 asked for, 416 booked (seats apart)", /on Bluewren 416 at 1:20 pm today, seats 9B and 27E, not together/.test(asked416.speech), asked416.speech);
+  await scene("home");
   const moved = await call(alexa, "rebook", { flight: "418" });
   check("approval asked in the app (URL elicitation)", asked.some((a) => a.startsWith(`url:${BASE}/approve/`)), asked.join(" | "));
   check("rebooked on the 3:45 with seats together", /^Done\. You and Maya are on Bluewren 418 at 3:45 pm today, seats 14A and 14B/.test(moved.speech), moved.speech);
@@ -144,7 +150,7 @@ try {
   await plain.close();
   await alexa.close();
 } finally {
-  server.kill();
+  process.kill(-server.pid!, "SIGTERM");
   fs.rmSync(state, { recursive: true, force: true });
 }
 console.log(failures ? `\n${failures} failed` : "\nall passed");

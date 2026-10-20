@@ -86,6 +86,8 @@ export function findTrip(ref?: string, pick?: (t: Trip) => boolean): Trip | unde
     const places = new Set(findAirports(q.replace(/\b(my|the|trip|flight|to|from|back|home)\b/gi, " ")).map((a) => a.code));
     const byPlace = trips.find((t) => places.has(flightById(t.flightId).to));
     if (byPlace) return byPlace;
+    // A number or code that matches nothing must not quietly become "the next trip".
+    if (/\d/.test(q)) return undefined;
   }
   const candidates = trips.filter((t) => (pick ? pick(t) : t.status === "active"));
   // A trip that has gone wrong is the one people mean by "my flight".
@@ -253,7 +255,11 @@ export function planRebook(ref?: string, option?: number, flight?: string): Rebo
   const acct = load();
   let id: string | undefined;
   if (option && acct.options?.conf === t.conf) id = acct.options.flights[option - 1];
-  if (!id && flight) id = candidates(t).find((c) => c.f.number === Number(flight.match(/\d{3,4}/)?.[0]))?.f.id;
+  if (!id && flight) {
+    const n = Number(flight.match(/\d{3,4}/)?.[0]);
+    id = candidates(t).find((c) => c.f.number === n)?.f.id;
+    if (!id) return { speech: `Bluewren ${n} isn't one of the flights with room for ${party(t)}. Want to hear the ones that are?`, next: { tool: "rebooking_options", args: { trip: t.conf } } };
+  }
   if (!id && !option && !flight) id = candidates(t)[best(t, candidates(t))]?.f.id;
   if (!id) return { speech: "Which flight would you like? Say the option number, like the second one.", needs: "input" };
   const pick = pickSeats(flightById(id), t.travelers.length);

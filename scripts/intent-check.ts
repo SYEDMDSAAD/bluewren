@@ -11,7 +11,8 @@ import path from "node:path";
 const PORT = 8898;
 const state = fs.mkdtempSync(path.join(os.tmpdir(), "bluewren-"));
 process.env.BW_STATE = state;
-const server = spawn("npx", ["tsx", "src/index.ts"], { env: { ...process.env, PORT: String(PORT), BW_VOICE: "0" }, stdio: ["ignore", "pipe", "inherit"] });
+if (await fetch(`http://localhost:${PORT}/health`).then(() => true, () => false)) throw new Error(`Something is already on port ${PORT}; stop it first.`);
+const server = spawn("npx", ["tsx", "src/index.ts"], { env: { ...process.env, PORT: String(PORT), BW_VOICE: "0" }, stdio: ["ignore", "pipe", "inherit"], detached: true });
 await new Promise<void>((resolve, reject) => {
   server.stdout!.on("data", (d) => String(d).includes("MCP server on") && resolve());
   server.on("exit", (c) => reject(new Error(`server exited ${c}`)));
@@ -29,6 +30,8 @@ const CASES: [string, string, Record<string, unknown>?][] = [
   ["Take the second one", "rebook", { option: 2 }],
   ["Put us on the 3:45", "rebook", { option: 3 }],
   ["Book the Midway one", "rebook", { option: 2 }],
+  ["go for blueprint 416", "rebook", { flight: "416" }],
+  ["Put us on Bluewren 1512", "rebook", { flight: "1512" }],
   ["Can I get my money back?", "refund_eligibility"],
   ["Am I owed a refund for this?", "refund_eligibility"],
   ["We don't want to fly anymore, cancel it and refund us", "request_refund", { what: "ticket" }],
@@ -67,7 +70,7 @@ try {
     console.log(`${wrong.length ? "✗" : "✓"} ${(ms / 1000).toFixed(1)}s ${text}\n    → ${name} ${JSON.stringify(args)}${wrong.length ? `  (wrong: ${wrong.join(", ")})` : ""}`);
   }
 } finally {
-  server.kill();
+  process.kill(-server.pid!, "SIGTERM");
   fs.rmSync(state, { recursive: true, force: true });
 }
 times.sort((a, b) => a - b);

@@ -350,6 +350,12 @@ export function ground(action: string, args: Record<string, unknown>, text: stri
 
   if (action === "rebook") {
     delete a.option;
+    // A flight number said out loud is the flight wanted, wherever the model put it.
+    const num = t.match(/\b(\d{3,4})\b/)?.[1];
+    if (num) {
+      a.flight = num;
+      if (a.trip === num) delete a.trip;
+    }
     // "the 3:45", "the Midway one", "the second one"
     const time = t.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?/);
     const byTime = time && !/\d{3,4}/.test(t.replace(/:/g, "x")) ? options.find((o) => o.depLocal.startsWith(`${time[1]}:${time[2] ?? "00"}`) && (!time[3] || o.depLocal.endsWith(time[3][0] === "a" ? "am" : "pm"))) : undefined;
