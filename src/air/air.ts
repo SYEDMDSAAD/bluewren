@@ -443,7 +443,7 @@ export function strandedHelp(ref?: string): Answer {
   const had = new Set(acct.vouchers.filter((v) => v.conf === t.conf).map((v) => v.kind));
   const due: ("hotel" | "meal" | "ride")[] = night ? ["meal", "hotel", "ride"] : ["meal"];
   const vouchers = () => acct.vouchers.filter((v) => v.conf === t.conf);
-  const extra = night ? { hotel: { name: HOTEL, near: `${city} airport` } } : {};
+  const extra = night ? { hotel: { name: HOTEL, near: `${city} airport` }, rideCover: RIDE_COVER } : {};
 
   // Already issued: say how to use them.
   if (due.every((k) => had.has(k))) {

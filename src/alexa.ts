@@ -86,6 +86,8 @@ export class Conversation {
   private pending?: Pending;
   /** An approval is open in the app on the user's phone. */
   private onPhone = false;
+  /** The hotel Bluewren is paying for tonight, once it has said so. */
+  private hotel?: { name: string; cover?: number };
   private offers: Offer[] = [];
   private done = new Set<string>();
   /** The numbered flights Alexa last read out, for "the 3:45" or "the Midway one". */
@@ -143,6 +145,7 @@ export class Conversation {
     this.offers = [];
     this.done.clear();
     this.options = [];
+    this.hotel = undefined;
   }
 
   /** Called when the page opens, so Alexa is subscribed before anything happens. */
@@ -225,6 +228,25 @@ export class Conversation {
     if (ALEXA_ACTIONS.includes(choice.name)) return this.alexaAction(choice.name, choice.args);
     const r = await this.call(choice.name, choice.args);
     if (r) this.respond(choice.name, r);
+    // "…and also book a cab": the second request in the same sentence isn't dropped.
+    if (r && /\b(cab|uber|lyft|taxi|ride)\b/i.test(text)) await this.bookRide({});
+  }
+
+  /** A ride. With no clear destination it goes to the hotel Bluewren is paying for, asking Bluewren first if needed. */
+  private async bookRide(args: Record<string, unknown>) {
+    const said = typeof args.place === "string" ? args.place.trim() : "";
+    const toHotel = !said || /\b(hotel|inn|there|chicago|austin)\b/i.test(said);
+    if (toHotel && !this.hotel) {
+      if (this.pending?.kind === "tool" && this.pending.name === "stranded_help") this.pending = undefined;
+      const r = await this.call("stranded_help", {});
+      if (r) this.respond("stranded_help", r, false, false);
+    }
+    if (toHotel && !this.hotel) return this.say("Where should the ride take you?");
+    this.done.add("ride");
+    this.offers = this.offers.filter((o) => o.key !== "ride");
+    if (this.pending?.kind === "offer" && this.pending.offer.key === "ride") this.pending = undefined;
+    this.show(toHotel ? ride(this.hotel!.name, this.hotel!.cover) : ride(said));
+    if (!this.pending) this.nextOffer();
   }
 
   private say(text: string, extra: Partial<Extract<Event, { type: "say" }>> = {}) {
@@ -246,9 +268,11 @@ export class Conversation {
   }
 
   /** Says a tool's reply, then offers what Bluewren suggests next, or what Alexa+ can do with it. */
-  private respond(tool: string, r: { speech: string; data?: unknown; next?: { tool: string; args: Record<string, unknown> } }, proactive = false) {
+  private respond(tool: string, r: { speech: string; data?: unknown; next?: { tool: string; args: Record<string, unknown> } }, proactive = false, prompt = true) {
     const opts = (r.data as { options?: { option: number; depLocal: string; toShort: string; flight: string }[] })?.options;
     if (opts?.length) this.options = opts;
+    const hotel = (r.data as { hotel?: { name: string }; rideCover?: number })?.hotel;
+    if (hotel) this.hotel = { name: hotel.name, cover: (r.data as { rideCover?: number }).rideCover };
     this.say(r.speech, { card: r.data, tool, proactive, question: !!r.next });
     // Alexa's own offers wait until Bluewren's suggested step is answered.
     const fresh = offersFor(tool, r.data, this.done);
@@ -257,7 +281,7 @@ export class Conversation {
       this.pending = { kind: "tool", name: r.next.tool, args: r.next.args };
       return;
     }
-    this.nextOffer();
+    if (prompt) this.nextOffer();
   }
 
   private nextOffer(): boolean {
@@ -281,7 +305,7 @@ export class Conversation {
   }
 
   /** The parts of Alexa+ that aren't Bluewren's, asked for directly. */
-  private alexaAction(name: string, args: Record<string, unknown>) {
+  private async alexaAction(name: string, args: Record<string, unknown>) {
     const events = calendar();
     if (name === "send_text") {
       const contact = String(args.contact ?? events.find((e) => e.contact)?.contact ?? "Mom");
@@ -289,7 +313,7 @@ export class Conversation {
       this.done.add(`text:${contact}`);
       return this.show(textMessage(contact, message));
     }
-    if (name === "book_ride") return this.show(ride(!args.place || /hotel/i.test(String(args.place)) ? "Prairie Gate Inn" : String(args.place)));
+    if (name === "book_ride") return this.bookRide(args);
     if (name === "move_meeting") {
       const m = events.find((e) => e.kind === "meeting");
       if (!m) return this.say("You don't have any meetings coming up.");

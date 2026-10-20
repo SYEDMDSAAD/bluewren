@@ -36,9 +36,11 @@ export function textMessage(contact: string, message: string): ReturnType<Offer[
   return { say: `Sent to ${contact}: "${message}"`, app: `Messages · to ${contact}`, note: message, wire: `Alexa+ → Messages: text ${contact}` };
 }
 
-export function ride(place: string): ReturnType<Offer["run"]> {
+/** A ride. `cover` is what the airline pays toward it, if anything. */
+export function ride(place: string, cover?: number): ReturnType<Offer["run"]> {
+  const to = /^(the |\d)/i.test(place) || !/\b(inn|hotel|suites|lodge)\b/i.test(place) ? place : `the ${place}`;
   return {
-    say: `Your Uber to the ${place} is 4 minutes away: a gray Toyota Camry. Pickup is at door 4 on the arrivals level. Keep the receipt, since Bluewren covers up to $40.`,
+    say: `Your Uber to ${to} is 4 minutes away: a gray Toyota Camry. Pickup is at door 4 on the arrivals level.${cover ? ` Keep the receipt, since Bluewren covers up to $${cover}.` : ""}`,
     app: "Uber",
     note: `Gray Toyota Camry, 4 min away. To ${place}.`,
     wire: `Alexa+ → Uber: ride to ${place}`,
@@ -78,7 +80,7 @@ export function offersFor(tool: string, data: any, done: Set<string>): Offer[] {
     if (gap < 90 && gap > -120 && !done.has(key))
       out.push({ key, ask: `You'd land at ${timeSpoken(at, data.arrival.tz)}, ${gap <= 0 ? "after" : "just before"} your ${timeSpoken(meeting.at, TZ)} ${meeting.title}${gap <= 0 ? " starts" : ""}. Want me to move it to the afternoon?`, run: () => moveMeeting(meeting.title) });
   }
-  if (tool === "stranded_help" && data?.hotel && !done.has("ride")) out.push({ key: "ride", ask: `Want me to get an Uber to the ${data.hotel.name}?`, run: () => ride(data.hotel.name) });
+  if (tool === "stranded_help" && data?.hotel && !done.has("ride")) out.push({ key: "ride", ask: `Want me to get an Uber to the ${data.hotel.name}?`, run: () => ride(data.hotel.name, data.rideCover) });
   if (tool === "stranded_help" && data?.needHotel && !done.has("hotel")) out.push({ key: "hotel", ask: "Want me to find a hotel near the airport on Expedia?", run: () => hotelSearch(data.city) });
   if (tool === "request_refund" && data?.expected && pickup?.contact && !done.has("text:refund"))
     out.push({ key: "text:refund", ask: `Want me to let ${pickup.contact} know you're not flying today?`, run: () => textMessage(pickup.contact!, "Change of plans: our flight fell through, so we're not flying today after all. I'll call you tonight.") });
