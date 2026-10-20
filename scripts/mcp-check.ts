@@ -108,7 +108,9 @@ try {
   const owed = await call(alexa, "refund_eligibility", {});
   check("refund owed for a delay over 3 hours: $413", /significant change/.test(owed.speech) && /\$413/.test(owed.speech) && owed.next?.tool === "request_refund", owed.speech);
   const meals = await call(alexa, "stranded_help", {});
-  check("meal vouchers for a long controllable delay", /2 meal vouchers of \$15 each/.test(meals.speech), meals.speech);
+  check("meal vouchers for a long controllable delay, called a delay", /2 meal vouchers of \$15 each/.test(meals.speech) && /Because the delay was/.test(meals.speech), meals.speech);
+  const how = await call(alexa, "stranded_help", {});
+  check("asked again: how to use them, not the same answer", /show the QR code when you pay/.test(how.speech), how.speech);
   answers = [false];
   const keep = await call(alexa, "request_refund", { what: "ticket" });
   check("saying no keeps the trip", /stays booked/.test(keep.speech), keep.speech);

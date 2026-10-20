@@ -426,19 +426,33 @@ export function strandedHelp(ref?: string): Answer {
   const s = status(cur);
   if (s.cancelled) return { speech: "Let's get you on a new flight first. Want to hear your options?", next: { tool: "rebooking_options", args: { trip: t.conf } } };
   const first = flightById(t.original ?? t.flightId);
-  const cause = t.original ? status(first).cause : s.cause;
+  // What's keeping the traveler waiting now: a delay on this flight, or the cancellation of the first one.
+  const what = s.delay > 0 || !t.original ? "delay" : "cancellation";
+  const cause = what === "delay" ? s.cause : status(first).cause;
   const wait = minutesBetween(first.dep, s.dep);
   const night = overnight(t);
   const city = airport(cur.from).city;
   if (wait < SIGNIFICANT_DELAY_MIN && !night) return { speech: `Your wait is under 3 hours, so there are no meal or hotel vouchers for this trip. ${statusSpeech(cur)}` };
   if (!controllable(cause))
     return {
-      speech: `This was caused by ${CAUSE[cause ?? "weather"]}, which is outside Bluewren's control, so Bluewren doesn't cover ${night ? "a hotel or meals" : "meals"}. Your new flight is still free.${night ? " I can look for a hotel near the airport if you'd like." : ""}`,
+      speech: `This ${what} was caused by ${CAUSE[cause ?? "weather"]}, which is outside Bluewren's control, so Bluewren doesn't cover ${night ? "a hotel or meals" : "meals"}. Your new flight is still free.${night ? " I can look for a hotel near the airport if you'd like." : ""}`,
       data: { conf: t.conf, covered: false, needHotel: night, city },
     };
   const acct = load();
   const n = t.travelers.length;
   const had = new Set(acct.vouchers.filter((v) => v.conf === t.conf).map((v) => v.kind));
+  const due: ("hotel" | "meal" | "ride")[] = night ? ["meal", "hotel", "ride"] : ["meal"];
+  const vouchers = () => acct.vouchers.filter((v) => v.conf === t.conf);
+  const extra = night ? { hotel: { name: HOTEL, near: `${city} airport` } } : {};
+
+  // Already issued: say how to use them.
+  if (due.every((k) => had.has(k))) {
+    const hotel = night ? ` For the ${HOTEL}, give your name at the front desk; the room is already paid for. For the ride, keep the receipt and add it in the app, up to ${money(RIDE_COVER)}.` : "";
+    return {
+      speech: `Your vouchers are in the Bluewren app, under your trip ${t.conf}. At any restaurant in the terminal, show the QR code when you pay; each one covers up to ${money(MEAL_VOUCHER)}, and they're good until your flight leaves.${hotel}`,
+      data: { conf: t.conf, covered: true, vouchers: vouchers(), ...extra },
+    };
+  }
   const add = (kind: "hotel" | "meal" | "ride", text: string) => !had.has(kind) && acct.vouchers.push({ id: newId(), conf: t.conf, kind, text });
   add("meal", `${n} meal voucher${n > 1 ? "s" : ""}, ${money(MEAL_VOUCHER)} each`);
   if (night) {
@@ -448,9 +462,9 @@ export function strandedHelp(ref?: string): Answer {
   save(acct);
   const meals = `${n > 1 ? `${n} meal vouchers` : "a meal voucher"} of ${money(MEAL_VOUCHER)}${n > 1 ? " each" : ""}`;
   const speech = night
-    ? `Because the cancellation was Bluewren's fault, Bluewren covers tonight: a room at the ${HOTEL}, about 10 minutes from the airport, ${meals}, and your ride to the hotel, up to ${money(RIDE_COVER)}. They're in the Bluewren app now.`
-    : `Because the ${t.original && status(first).cancelled ? "cancellation" : "delay"} was Bluewren's fault and your wait is 3 hours or more, you get ${meals}. They're in the Bluewren app now, and they work at any restaurant in the terminal.`;
-  return { speech, data: { conf: t.conf, covered: true, vouchers: acct.vouchers.filter((v) => v.conf === t.conf), ...(night ? { hotel: { name: HOTEL, near: `${city} airport` } } : {}) } };
+    ? `Because the ${what} was Bluewren's fault, Bluewren covers tonight: a room at the ${HOTEL}, about 10 minutes from the airport, ${meals}, and your ride to the hotel, up to ${money(RIDE_COVER)}. They're in the Bluewren app now.`
+    : `Because the ${what} was Bluewren's fault and your wait is 3 hours or more, you get ${meals}. They're in the Bluewren app now; show the QR code at any restaurant in the terminal.`;
+  return { speech, data: { conf: t.conf, covered: true, vouchers: vouchers(), ...extra } };
 }
 
 // ---------- alerts (what Alexa says without being asked) ----------
