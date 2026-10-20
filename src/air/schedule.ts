@@ -80,7 +80,7 @@ export function status(f: Flight): Status {
   const o = load().ops[f.id] ?? {};
   const delay = o.cancelled ? 0 : o.delay ?? 0;
   const h = hash(f.id);
-  return { cancelled: !!o.cancelled, delay, cause: o.cause, dep: addMinutes(f.dep, delay), arr: addMinutes(f.arr, delay), gate: `${"ABC"[h % 3]}${2 + (h % 28)}` };
+  return { cancelled: !!o.cancelled, delay, cause: o.cause, dep: addMinutes(f.dep, delay), arr: addMinutes(f.arr, delay), gate: o.gate ?? `${"ABC"[h % 3]}${2 + (h % 28)}` };
 }
 
 // ---------- seats ----------

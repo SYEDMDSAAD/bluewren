@@ -154,6 +154,7 @@ button { font: inherit; cursor: pointer; }
 .scenes button { background: var(--chip); color: var(--ink); border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-size: 13px; }
 .scenes button:hover { border-color: var(--brand); }
 .scenes button.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+.scenes button.event { border-style: dashed; }
 
 /* Alexa speaking up unprompted */
 .chat .a.p .said { border: 1px solid #ffb84d; box-shadow: 0 0 18px #ffb84d55; }

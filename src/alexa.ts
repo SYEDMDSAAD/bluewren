@@ -4,7 +4,7 @@ import { ElicitRequestSchema, ResourceUpdatedNotificationSchema, type ElicitResu
 import type { Response } from "express";
 import { now } from "./air/clock.js";
 import { TZ } from "./air/scenes.js";
-import { calendar, hotelSearch, moveMeeting, offersFor, ride, textMessage, type Offer } from "./home.js";
+import { calendar, hotelSearch, moveMeeting, offersFor, ride, textMessage, type Done, type Offer } from "./home.js";
 
 /**
  * A stand-in for Alexa+, for the demo page. It connects to the Bluewren MCP server like any MCP
@@ -26,7 +26,7 @@ export type Event =
   | { type: "mcp"; dir: "out" | "in" | "alexa"; text: string }
   | { type: "idle" };
 
-const MCP_ACTIONS = ["my_trips", "flight_status", "rebooking_options", "rebook", "refund_eligibility", "request_refund", "refund_status", "stranded_help", "bag_status"];
+const MCP_ACTIONS = ["my_trips", "flight_status", "rebooking_options", "rebook", "watch_for_better", "refund_eligibility", "request_refund", "refund_status", "stranded_help", "request_assistance", "bag_status"];
 const ALEXA_ACTIONS = ["send_text", "book_ride", "move_meeting", "find_hotel"];
 
 /** The one form the router fills: the action and every argument any action takes. */
@@ -45,6 +45,8 @@ const FORM = {
     contact: { type: "string" },
     message: { type: "string" },
     place: { type: "string" },
+    who: { type: "string" },
+    kind: { type: "string", enum: ["", "wheelchair", "vision", "hearing", "escort"] },
     reply: { type: "string" },
   },
   required: ["action"],
@@ -58,11 +60,13 @@ my_trips: my trips, my flights, what's coming up
 flight_status: is my flight on time, delayed, cancelled, which gate (trip)
 rebooking_options: other flights, what are my options, get me on another flight, a later or earlier flight, any flights tomorrow or tonight (trip, together, day, time_of_day, airport)
 rebook: move me to a flight, take the 3:45, the second one, book that one (option, flight)
+watch_for_better: tell me or let me know if an earlier flight or seats together open up (together)
 refund_eligibility: can I get my money back, am I owed a refund
 request_refund: refund it, cancel and refund, I don't want to fly anymore, refund my bag fee (what)
 refund_status: where is my refund
 stranded_help: hotel, meal vouchers, food, where do we stay tonight
 bag_status: where is my bag, my luggage
+request_assistance: wheelchair, help getting to the gate, someone who is blind or deaf, special assistance (who, kind)
 send_text: text or tell someone (contact, message)
 book_ride: get an Uber, a ride, a taxi (place)
 move_meeting: move or reschedule my meeting
@@ -86,6 +90,8 @@ export class Conversation {
   private pending?: Pending;
   /** An approval is open in the app on the user's phone. */
   private onPhone = false;
+  /** Update notices that arrive just after Alexa's own request are echoes of it. */
+  private quietUntil = 0;
   /** The hotel Bluewren is paying for tonight, once it has said so. */
   private hotel?: { name: string; cover?: number };
   private offers: Offer[] = [];
@@ -126,7 +132,7 @@ export class Conversation {
     });
     client.setNotificationHandler(ResourceUpdatedNotificationSchema, async (n) => {
       // Changes made while Alexa is mid-request are its own doing (a rebooking, a refund), not news.
-      if (n.params.uri !== TRIPS || this.running || this.form) return;
+      if (n.params.uri !== TRIPS || this.running || this.form || Date.now() < this.quietUntil) return;
       this.emit({ type: "mcp", dir: "in", text: `notifications/resources/updated ${TRIPS}` });
       this.checkAlerts();
     });
@@ -227,15 +233,25 @@ export class Conversation {
     if ("say" in choice) return this.say(choice.say);
     if (ALEXA_ACTIONS.includes(choice.name)) return this.alexaAction(choice.name, choice.args);
     const r = await this.call(choice.name, choice.args);
-    if (r) this.respond(choice.name, r);
-    // "…and we need a hotel", "…and also book a cab": a second request in the same sentence isn't dropped.
-    if (r && choice.name !== "stranded_help" && /\b(hotel|stay the night|overnight|sleep|room)\b/i.test(text)) {
+    const watchToo = choice.name === "rebook" && /\b(let me know|tell me|notify|watch|keep an eye|alert me)\b/i.test(text);
+    const hotelToo = choice.name !== "stranded_help" && /\b(hotel|stay the night|overnight|sleep|room)\b/i.test(text);
+    const rideToo = /\b(cab|uber|lyft|taxi|ride)\b/i.test(text);
+    // Alexa's own questions wait until every part of the sentence is done.
+    if (r) this.respond(choice.name, r, false, !(watchToo || hotelToo || rideToo));
+    // "…but tell me if something earlier opens", "…and we need a hotel", "…and also book a cab":
+    // a second request in the same sentence isn't dropped.
+    if (r && watchToo) {
+      const w = await this.call("watch_for_better", /\btogether\b/i.test(text) ? { together: true } : {});
+      if (w) this.respond("watch_for_better", w, false, false);
+    }
+    if (r && hotelToo) {
       const p = this.pending as Pending | undefined; // set by the reply just given
       if (p?.kind === "tool" && p.name === "stranded_help") this.pending = undefined;
       const h = await this.call("stranded_help", {});
-      if (h) this.respond("stranded_help", h, false, !/\b(cab|uber|lyft|taxi|ride)\b/i.test(text));
+      if (h) this.respond("stranded_help", h, false, false);
     }
-    if (r && /\b(cab|uber|lyft|taxi|ride)\b/i.test(text)) await this.bookRide({});
+    if (r && rideToo) await this.bookRide({});
+    else if (r && (watchToo || hotelToo) && !this.pending) this.nextOffer();
   }
 
   /** A ride. With no clear destination it goes to the hotel Bluewren is paying for, asking Bluewren first if needed. */
@@ -267,6 +283,7 @@ export class Conversation {
     if (!quiet) this.emit({ type: "thinking", text: `Asking Bluewren (${name})…` });
     const res = await client.callTool({ name, arguments: args }, undefined, { timeout: 10 * 60_000, resetTimeoutOnProgress: true });
     this.onPhone = false;
+    if (name !== "trip_alerts") this.quietUntil = Date.now() + 1500;
     const sc = res.structuredContent as { speech?: string; data?: unknown; next?: { tool: string; args: Record<string, unknown> } } | undefined;
     const speech = sc?.speech ?? (res.content as { type: string; text?: string }[]).find((c) => c.type === "text")?.text ?? "Sorry, something went wrong.";
     this.emit({ type: "mcp", dir: "in", text: `result ${name}: ${speech.slice(0, 80)}${speech.length > 80 ? "…" : ""}${sc?.next ? ` · next: ${sc.next.tool}` : ""}` });
@@ -300,11 +317,14 @@ export class Conversation {
 
   private runOffer(o: Offer) {
     this.done.add(o.key);
-    this.show(o.run());
+    const r = o.run();
+    if (r.hotel) this.hotel = { name: r.hotel };
+    if (r.then) this.offers = [...r.then.filter((x) => !this.done.has(x.key)), ...this.offers];
+    this.show(r);
     this.nextOffer();
   }
 
-  private show(r: { say: string; app: string; note: string; wire: string }) {
+  private show(r: Done) {
     this.emit({ type: "mcp", dir: "alexa", text: `${r.wire} (simulated)` });
     this.emit({ type: "note", app: r.app, text: r.note });
     this.say(r.say);
@@ -326,7 +346,7 @@ export class Conversation {
       this.done.add(`move:${m.title}`);
       return this.show(moveMeeting(m.title));
     }
-    return this.show(hotelSearch("Austin"));
+    return this.runOffer({ key: "hotel", ask: "", run: () => hotelSearch("Austin") });
   }
 
   /**
@@ -394,6 +414,10 @@ export function ground(action: string, args: Record<string, unknown>, text: stri
   if (a.flight && !/\d{3,4}/.test(t)) delete a.flight;
   if (a.trip && !/\b[A-Z0-9]{6}\b/.test(text) && !/\d{3,4}|chicago|austin|return|home|back/.test(t)) delete a.trip;
   if (action === "request_refund") a.what = /\bbag/.test(t) ? "bag_fee" : "ticket";
+  if (action === "request_assistance") {
+    a.kind = /wheel ?chair|can'?t walk|walking|knee|leg|mobility/.test(t) ? "wheelchair" : /\bblind|can'?t see|low vision|vision|sight/.test(t) ? "vision" : /\bdeaf|hard of hearing|can'?t hear|hearing/.test(t) ? "hearing" : "escort";
+    a.who = /\b(maya|my daughter|daughter|my kid)\b/.test(t) ? "Maya" : "me";
+  }
 
   if (action === "rebook") {
     delete a.option;

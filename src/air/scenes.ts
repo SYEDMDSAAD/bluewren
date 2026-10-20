@@ -1,5 +1,6 @@
 import { addDays, atLocal, localDate, setNow } from "./clock.js";
-import { blank, save, type Account } from "./store.js";
+import { status, flightById } from "./schedule.js";
+import { blank, save, type Account, type Alert } from "./store.js";
 
 /**
  * The demo's stories. Each sets the clock and the account, then a moment later airline operations
@@ -7,10 +8,12 @@ import { blank, save, type Account } from "./store.js";
  * through the MCP resource it subscribed to.
  */
 export const SCENES = {
-  home: "Morning at home: the flight is cancelled",
-  gate: "At the gate: delayed over 3 hours",
-  overnight: "Evening: the last flight is cancelled",
-  bag: "Next morning: the bag is late",
+  home: "Morning at home: flight cancelled",
+  boarding: "At the airport: gate change",
+  gate: "At the gate: delayed 3+ hours",
+  overnight: "Evening: last flight cancelled",
+  weather: "Evening: storm cancels the flight",
+  bag: "Next morning: bag is late",
 } as const;
 export type Scene = keyof typeof SCENES;
 
@@ -37,7 +40,7 @@ export function setScene(scene: Scene): () => void {
   const tomorrow = addDays(today, 1);
   const acct = base(today);
   const trip = acct.trips[0];
-  const alert = (kind: "cancelled" | "delayed" | "bag") => acct.alerts.push({ id: `${scene}-${Date.now()}`, conf: trip.conf, kind, at: new Date().toISOString() });
+  const alert = (kind: Alert["kind"], detail?: string) => acct.alerts.push({ id: `${scene}-${Date.now()}`, conf: trip.conf, kind, at: new Date().toISOString(), detail });
 
   if (scene === "home") {
     setNow(atLocal(today, "07:30", TZ));
@@ -66,13 +69,29 @@ export function setScene(scene: Scene): () => void {
       save(acct);
     };
   }
-  if (scene === "overnight") {
+  if (scene === "boarding") {
+    // Moved this morning to the 3:45 after the 11:05 was cancelled; now at the airport.
+    setNow(atLocal(today, "14:50", TZ));
+    acct.ops[id(412, "AUS", "ORD", today)] = { cancelled: true, cause: "crew" };
+    trip.original = trip.flightId;
+    trip.flightId = id(418, "AUS", "ORD", today);
+    trip.movedBecause = { what: "cancellation", cause: "crew" };
+    trip.seats = { me: "14A", maya: "14B" };
+    save(acct);
+    return () => {
+      const old = status(flightById(trip.flightId)).gate;
+      acct.ops[trip.flightId] = { ...acct.ops[trip.flightId], gate: old.startsWith("C") ? "B4" : "C4" };
+      alert("gate", old);
+      save(acct);
+    };
+  }
+  if (scene === "overnight" || scene === "weather") {
     setNow(atLocal(today, "20:05", TZ));
     trip.flightId = id(426, "AUS", "ORD", today);
     acct.ops[id(402, "AUS", "ORD", tomorrow)] = { seats: "together" };
     save(acct);
     return () => {
-      acct.ops[id(426, "AUS", "ORD", today)] = { cancelled: true, cause: "crew" };
+      acct.ops[id(426, "AUS", "ORD", today)] = { cancelled: true, cause: scene === "weather" ? "weather" : "crew" };
       alert("cancelled");
       save(acct);
     };

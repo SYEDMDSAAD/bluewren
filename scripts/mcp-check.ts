@@ -69,7 +69,7 @@ async function scene(name: string) {
 try {
   const alexa = await connect(true);
   const tools = (await alexa.listTools()).tools.map((t) => t.name);
-  check("10 tools listed", tools.length === 10, tools.join(","));
+  check("12 tools listed", tools.length === 12, tools.join(","));
   await alexa.subscribeResource({ uri: "bluewren://trips" });
 
   // Morning at home: the 11:05 is cancelled; Alexa hears about it through the subscription.
@@ -138,6 +138,40 @@ try {
   const fee = await call(alexa, "request_refund", { what: "bag_fee" });
   check("bag fee refunded", /\$35 bag fee is on its way back/.test(fee.speech), fee.speech);
   check("bag fee can't be refunded twice", /None of your bags is late|already been refunded/.test((await call(alexa, "request_refund", { what: "bag_fee" })).speech));
+
+  // At the airport: the gate moves; wheelchair and text-alert help; the help follows a rebooking.
+  await scene("boarding");
+  const gateAlert = await call(alexa, "trip_alerts");
+  check("gate change alert: new gate, walk, boarding time", /now leaves from gate \w+ instead of \w+, about \d minutes' walk\. Boarding starts at 3:15 pm/.test(gateAlert.speech), gateAlert.speech);
+  const chair = await call(alexa, "request_assistance", { who: "me", kind: "wheelchair" });
+  check("wheelchair arranged, free, follows changes", /an agent with a wheelchair will come to you/.test(chair.speech) && /It's free/.test(chair.speech), chair.speech);
+  const texts = await call(alexa, "request_assistance", { who: "my daughter", kind: "hearing" });
+  check("text alerts for Maya", /boarding calls for Maya will come as texts/.test(texts.speech), texts.speech);
+  const nobody = await call(alexa, "request_assistance", { who: "dad", kind: "wheelchair" });
+  check("help for someone not on the booking is questioned", /Dad isn't on this booking\. Who is the help for: you or Maya\?/.test(nobody.speech), nobody.speech);
+
+  // Watching for a better flight: moved to the 3:45, seats together open on the 1:20, Alexa hears it.
+  await scene("home");
+  await call(alexa, "trip_alerts");
+  await call(alexa, "rebook", { flight: "418" });
+  const watch = await call(alexa, "watch_for_better", {});
+  check("watching for an earlier flight with seats together", /I'll watch for an earlier Bluewren flight to O'Hare with seats together/.test(watch.speech), watch.speech);
+  const before = updated;
+  const opened = await (await fetch(`${BASE}/demo/event/seats`, { method: "POST" })).json();
+  await new Promise((r) => setTimeout(r, 300));
+  check("seats opened on the 1:20 and the client was told", String(opened.opened).startsWith("416-") && updated > before, JSON.stringify(opened));
+  const better = await call(alexa, "trip_alerts");
+  check("better-flight alert offers the 1:20", /seats together just opened on Bluewren 416 at 1:20 pm today/.test(better.speech) && better.next?.args.flight === "416", better.speech);
+  await call(alexa, "request_assistance", { kind: "wheelchair" });
+  const switched = await call(alexa, "rebook", better.next!.args);
+  check("switched, and the wheelchair request moved too", /on Bluewren 416 at 1:20 pm/.test(switched.speech) && /wheelchair request moved with you/.test(switched.speech), switched.speech);
+
+  // Storm: the night isn't covered; Alexa+ can find a hotel.
+  await scene("weather");
+  const storm = await call(alexa, "trip_alerts");
+  check("weather cancellation offers tomorrow, no hotel promise", /cancelled because of weather/.test(storm.speech) && !/cover your hotel/.test(storm.speech), storm.speech);
+  const stormMove = await call(alexa, "rebook", storm.next!.args);
+  check("rebooked; hotel not covered, flagged for Alexa", /doesn't cover a hotel tonight/.test(stormMove.speech) && stormMove.data?.needHotel === true, stormMove.speech);
 
   // A client with no elicitation: the server never changes a booking without a second call.
   await scene("home");

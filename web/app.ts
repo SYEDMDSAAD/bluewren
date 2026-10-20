@@ -180,9 +180,12 @@ function flightCard(f: any, extra?: { num?: number; seats?: string; label?: stri
   return c;
 }
 
+const HELP: Record<string, string> = { wheelchair: "♿ Wheelchair", vision: "🦯 Guide", hearing: "💬 Text alerts", escort: "🤝 Escort" };
+
 function tripCard(t: any): HTMLElement {
   const c = flightCard(t.flight, { seats: `${t.conf} · ${t.travelers.map((p: any) => `${p.name.split(" ")[0]} ${p.seat}`).join(" · ")}${t.bags ? ` · ${t.bags} bag` : ""}` });
   c.classList.add("ticket");
+  if (t.assistance?.length) c.append(el("div", "seats", t.assistance.map((a: any) => `${HELP[a.kind] ?? a.kind} for ${a.who === "Jordan" ? "you" : a.who}`).join(" · ")));
   return c;
 }
 
@@ -252,6 +255,8 @@ function afterAction(tool: string | undefined, data: any) {
   if (tool === "request_refund" && data?.amount) notify("Bluewren", `Refund of $${data.amount} requested to ${data.to ?? "your card"}.`);
   if (tool === "stranded_help" && data?.vouchers?.length) notify("Bluewren", `Vouchers added: ${data.vouchers.map((v: any) => v.text).join("; ")}.`);
   if (tool === "trip_alerts" && data?.alert === "cancelled") notify("Bluewren", "Your flight has been cancelled. Open the app or ask Alexa for options.");
+  if (tool === "trip_alerts" && data?.alert === "gate") notify("Bluewren", `Gate change: ${data.flight?.flight} now leaves from gate ${data.flight?.gate}.`);
+  if (tool === "trip_alerts" && data?.alert === "better") notify("Bluewren", "Seats together just opened on an earlier flight. Ask Alexa to switch.");
   if (tool === "trip_alerts" && data?.alert === "delayed") notify("Bluewren", `${data.flight?.flight ?? "Your flight"} is delayed: now ${data.flight?.depLocal ?? ""}.`);
 }
 
@@ -279,6 +284,15 @@ async function loadState() {
     b.onclick = () => playScene(k);
     box.append(b);
   }
+  // An operations event for the "watch for a better flight" story.
+  const ev = el("button", "event", "⚡ Seats open up") as HTMLButtonElement;
+  ev.type = "button";
+  ev.title = "Seats together open on an earlier flight, if Alexa is watching for one";
+  ev.onclick = async () => {
+    const r = await (await fetch("/demo/event/seats", { method: "POST" })).json();
+    if (!r.opened) add("t", "Nobody is watching for a better flight yet. Ask Alexa to tell you if an earlier flight opens.");
+  };
+  box.append(ev);
   $("where").textContent = state!.scene === "bag" ? "Chicago" : state!.scene === "home" ? "At home in Austin" : "Austin airport";
 }
 async function playScene(name: string) {

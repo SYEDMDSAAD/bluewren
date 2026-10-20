@@ -19,9 +19,11 @@ import {
   refundEligibility,
   refundQuote,
   refundStatus,
+  requestAssistance,
   strandedHelp,
   tripAlerts,
   tripView,
+  watchForBetter,
   type Answer,
   type RebookPlan,
   type RefundQuote,
@@ -30,7 +32,7 @@ import { airport } from "./air/airports.js";
 import { flightById } from "./air/schedule.js";
 import { load, onChange } from "./air/store.js";
 
-const INSTRUCTIONS = `Bluewren Air helps the signed-in traveler when a flight goes wrong: status, rebooking, refunds, meal and hotel vouchers, and late bags.
+const INSTRUCTIONS = `Bluewren Air helps the signed-in traveler when a flight goes wrong: status, gate changes, rebooking, watching for a better flight, refunds, meal and hotel vouchers, airport assistance and late bags.
 - Every tool returns "speech": say it to the user as it is. It is already short and written for voice.
 - If a result has "next" and the user says yes, call that tool with those arguments.
 - Subscribe to bluewren://trips. When it changes, call trip_alerts and, if it has news (data.count > 0), say it without being asked.
@@ -176,6 +178,32 @@ export function createServer(baseUrl: string): McpServer {
       if ("speech" in again) return reply(again);
       return reply(completeRebook({ ...plan, ...again }));
     },
+  );
+
+  mcp.registerTool(
+    "watch_for_better",
+    {
+      title: "Watch for a better flight",
+      description: "After Bluewren has moved the traveler, keeps watching for an earlier flight to the same airport (with seats together, by default for a party) and raises a trip alert the moment one opens; trip_alerts then offers it.",
+      inputSchema: { trip, together: z.boolean().optional().describe("Only flights where the party can sit together (default for more than one traveler)") },
+      annotations: { readOnlyHint: false },
+    },
+    async ({ trip, together }) => reply(watchForBetter(trip, together)),
+  );
+
+  mcp.registerTool(
+    "request_assistance",
+    {
+      title: "Airport assistance",
+      description: "Free help at the airport for a traveler on the booking (U.S. Air Carrier Access Act): a wheelchair, a guide for someone blind or with low vision, text alerts for someone deaf or hard of hearing, or an escort. It follows the traveler if the flight changes.",
+      inputSchema: {
+        trip,
+        who: z.string().optional().describe("The traveler, as the user said it: 'me', 'Maya', 'my daughter'. Default me"),
+        kind: z.enum(["wheelchair", "vision", "hearing", "escort"]),
+      },
+      annotations: { readOnlyHint: false },
+    },
+    async ({ trip, who, kind }) => reply(requestAssistance(trip, who, kind)),
   );
 
   mcp.registerTool(

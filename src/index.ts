@@ -6,6 +6,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { Conversation } from "./alexa.js";
 import { getApproval, settle, type Outcome } from "./approvals.js";
+import { openSeats } from "./air/air.js";
 import { now } from "./air/clock.js";
 import { currentScene, SCENES, setScene, TZ, type Scene } from "./air/scenes.js";
 import { createServer } from "./mcp.js";
@@ -137,6 +138,9 @@ app.post("/demo/scene/:name", (req: Request, res: Response) => {
   setTimeout(happen, Number(process.env.BW_SCENE_DELAY_MS ?? 2500));
   res.json({ ok: true, now: now().toISOString() });
 });
+
+// An operations event for the "watch for a better flight" story: seats together open on an earlier flight.
+app.post("/demo/event/seats", (_req, res) => void res.json({ opened: openSeats() ?? null }));
 
 // ---------- the demo page's natural voice ----------
 

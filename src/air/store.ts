@@ -32,6 +32,10 @@ export interface Trip {
   original?: string;
   /** Why the traveler was last moved: the flight they left was cancelled or delayed, and the cause. */
   movedBecause?: { what: "delay" | "cancellation"; cause?: "crew" | "mechanical" | "weather" };
+  /** "Tell me if an earlier flight with seats together opens": watched until one does. */
+  watch?: { together: boolean };
+  /** Help at the airport, by traveler; it moves with the trip. */
+  assistance?: { who: string; kind: AssistKind }[];
   bookedAt: string;
 }
 
@@ -59,15 +63,21 @@ export interface Ops {
   cause?: "crew" | "mechanical" | "weather";
   /** Seats left: none, two apart, or a few together. */
   seats?: "full" | "apart" | "together";
+  /** A new gate. */
+  gate?: string;
 }
 
 export interface Alert {
   id: string;
   conf: string;
-  kind: "cancelled" | "delayed" | "bag";
+  kind: "cancelled" | "delayed" | "bag" | "gate" | "better";
   at: string;
   read?: boolean;
+  /** The old gate (gate), or the flight that opened up (better). */
+  detail?: string;
 }
+
+export type AssistKind = "wheelchair" | "vision" | "hearing" | "escort";
 
 export interface Account {
   travelers: Traveler[];

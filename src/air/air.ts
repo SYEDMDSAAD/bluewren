@@ -1,7 +1,7 @@
 import { airport, findAirports, sameCity } from "./airports.js";
 import { addDays, businessDaysAfter, daySpoken, durationSpoken, localDate, localMinutes, minutesBetween, now, parseDay, timeSpoken, when } from "./clock.js";
 import { departures, flightById, label, pickSeats, status, type Flight, type Status } from "./schedule.js";
-import { load, newId, save, type Trip } from "./store.js";
+import { load, newId, save, type AssistKind, type Trip } from "./store.js";
 
 /** A tool's answer: what to say, and the data behind it. `next` is what a plain "yes" should do. */
 export interface Answer {
@@ -68,6 +68,7 @@ export function tripView(t: Trip) {
     travelers: t.travelers.map((id) => ({ name: acct.travelers.find((p) => p.id === id)!.name, seat: t.seats[id] })),
     bags: t.bags.length,
     moved: !!t.original,
+    assistance: (t.assistance ?? []).map((a) => ({ who: load().travelers.find((p) => p.id === a.who)!.first, kind: a.kind })),
   };
 }
 
@@ -129,8 +130,12 @@ export function statusSpeech(f: Flight): string {
   if (s.dep < now()) return `${name} is in the air and lands at ${to.short} at ${timeSpoken(s.arr, to.tz)}.`;
   if (s.delay)
     return `${name} is delayed ${durationSpoken(s.delay)}${s.cause ? ` because of ${CAUSE[s.cause]}` : ""}. It now leaves at ${when(s.dep, from.tz)} from gate ${s.gate} and lands at ${to.short} at ${timeSpoken(s.arr, to.tz)}.`;
-  return `${name} is on time, leaving at ${when(s.dep, from.tz)} from gate ${s.gate} and landing at ${to.short} at ${timeSpoken(s.arr, to.tz)}.`;
+  const soon = minutesBetween(now(), s.dep) <= 180 ? ` Boarding starts at ${timeSpoken(boarding(s), from.tz)}.` : "";
+  return `${name} is on time, leaving at ${when(s.dep, from.tz)} from gate ${s.gate} and landing at ${to.short} at ${timeSpoken(s.arr, to.tz)}.${soon}`;
 }
+
+/** Boarding starts 30 minutes before departure. */
+export const boarding = (s: Status) => new Date(s.dep.getTime() - 30 * 60_000);
 
 export function flightStatus(ref?: string): Answer {
   const t = findTrip(ref);
@@ -222,7 +227,7 @@ export function rebookingOptions(ref?: string, p: Prefs = {}): Answer {
   if (!t) return NO_TRIP;
   const d = disruption(t);
   const cur = flightById(t.flightId);
-  if (d.kind === "none") return { speech: `${statusSpeech(cur)} There's nothing to rebook. Bluewren moves you for free when it cancels your flight or delays it by 3 hours or more.`, data: tripView(t) };
+  if (d.kind === "none" && !t.original) return { speech: `${statusSpeech(cur)} There's nothing to rebook. Bluewren moves you for free when it cancels your flight or delays it by 3 hours or more.`, data: tripView(t) };
   const cs = candidates(t, p).slice(0, 4);
   const acct = load();
   acct.options = { conf: t.conf, flights: cs.map((c) => c.f.id) };
@@ -251,7 +256,7 @@ export interface RebookPlan {
 export function planRebook(ref?: string, option?: number, flight?: string): RebookPlan | Answer {
   const t = findTrip(ref);
   if (!t) return NO_TRIP;
-  if (disruption(t).kind === "none") return rebookingOptions(t.conf);
+  if (disruption(t).kind === "none" && !t.original) return rebookingOptions(t.conf);
   const acct = load();
   let id: string | undefined;
   if (option && acct.options?.conf === t.conf) id = acct.options.flights[option - 1];
@@ -294,6 +299,7 @@ export function completeRebook(plan: RebookPlan): Answer {
   t.original ??= t.flightId;
   t.flightId = plan.flightId;
   t.seats = Object.fromEntries(t.travelers.map((id, i) => [id, plan.seats[i]]));
+  t.watch = undefined;
   if (acct.options?.conf === t.conf) acct.options = undefined;
   save(acct);
   const f = flightById(t.flightId);
@@ -301,14 +307,19 @@ export function completeRebook(plan: RebookPlan): Answer {
   const to = airport(f.to);
   const seats = plan.seats.length > 1 ? `seats ${list(plan.seats)}${plan.together ? "" : ", not together"}` : `seat ${plan.seats[0]}`;
   const bag = t.bags.length ? ` Your checked bag${t.bags.length > 1 ? "s move" : " moves"} with you.` : "";
-  let speech = `Done. ${cap(party(t))} are on ${label(f)} at ${when(s.dep, airport(f.from).tz)}, ${seats}, landing at ${to.short} at ${timeSpoken(s.arr, to.tz)}.${bag} New boarding passes are in the Bluewren app.`;
+  const help = t.assistance?.length ? ` Your ${list([...new Set(t.assistance.map((a) => ASSIST_NAME[a.kind]))])} moved with you.` : "";
+  let speech = `Done. ${cap(party(t))} are on ${label(f)} at ${when(s.dep, airport(f.from).tz)}, ${seats}, landing at ${to.short} at ${timeSpoken(s.arr, to.tz)}.${bag}${help} New boarding passes are in the Bluewren app.`;
   const cause = t.movedBecause!.cause;
   let next: Answer["next"];
+  let needHotel = false;
   if (overnight(t) && controllable(cause) && !acct.vouchers.some((v) => v.conf === t.conf && v.kind === "hotel")) {
     speech += " You'll be staying the night, and Bluewren covers your hotel. Want the details?";
     next = { tool: "stranded_help", args: { trip: t.conf } };
+  } else if (overnight(t) && !controllable(cause)) {
+    speech += ` Because ${CAUSE[cause ?? "weather"]} is outside Bluewren's control, the airline doesn't cover a hotel tonight.`;
+    needHotel = true;
   }
-  return { speech, data: { ...tripView(t), arrival: { at: s.arr.toISOString(), tz: to.tz, airport: to.short, city: to.city } }, next };
+  return { speech, data: { ...tripView(t), arrival: { at: s.arr.toISOString(), tz: to.tz, airport: to.short, city: to.city }, ...(needHotel ? { needHotel, city: airport(f.from).city } : {}) }, next };
 }
 
 // ---------- refunds ----------
@@ -485,6 +496,25 @@ export function tripAlerts(): Answer {
   const to = airport(f.to);
   const s = status(f);
 
+  if (a.kind === "gate") {
+    const walk = a.detail?.[0] === s.gate[0] ? 4 : 9;
+    const mins = minutesBetween(now(), boarding(s));
+    const chair = t.assistance?.some((x) => x.kind === "wheelchair") ? " Your wheelchair agent has the new gate too." : "";
+    return {
+      speech: `Heads up, ${first}. ${label(f)} to ${to.city} now leaves from gate ${s.gate} instead of ${a.detail}, about ${walk} minutes' walk. Boarding starts at ${timeSpoken(boarding(s), from.tz)}${mins > 0 ? `, in ${mins} minutes` : ""}.${chair}`,
+      data: { count: unread.length, alert: a.kind, ...tripView(t) },
+    };
+  }
+  if (a.kind === "better" && a.detail) {
+    const nf = flightById(a.detail);
+    const ns = status(nf);
+    const earlier = minutesBetween(ns.arr, s.arr);
+    return {
+      speech: `Good news, ${first}. ${t.travelers.length > 1 ? `${t.travelers.length === 2 ? "Two" : "Enough"} seats together` : "A seat"} just opened on ${label(nf)} at ${when(ns.dep, from.tz)}, landing ${durationSpoken(earlier)} earlier than your flight. Want to switch? It's free.`,
+      data: { count: unread.length, alert: a.kind, ...tripView(t) },
+      next: { tool: "rebook", args: { trip: t.conf, flight: String(nf.number) } },
+    };
+  }
   if (a.kind === "bag") {
     const b = bagStatus(t.conf);
     return { speech: `Good morning, ${first}. An update on your bag from yesterday's flight. ${b.speech}`, data: { count: unread.length, alert: a.kind }, next: b.next };
@@ -517,4 +547,93 @@ export function refundStatus(): Answer {
   if (!acct.refunds.length) return { speech: "You don't have any refunds in progress." };
   const said = acct.refunds.map((r) => `${money(r.amount)} for ${r.what === "ticket" ? "your tickets" : "your bag fee"}, due by ${new Date(r.expected).toLocaleDateString("en-US", { timeZone: "America/Chicago", month: "long", day: "numeric" })}`);
   return { speech: `You have ${acct.refunds.length} refund${acct.refunds.length > 1 ? "s" : ""} on the way to your ${acct.card}: ${said.join("; ")}.`, data: acct.refunds };
+}
+
+// ---------- watching for a better flight ----------
+
+/** Earlier flights to the same airport with room (and seats together, if asked), best first. */
+function better(t: Trip, together: boolean): Candidate[] {
+  const cur = flightById(t.flightId);
+  const arr = status(cur).arr;
+  return candidates(t, { together }).filter((c) => c.f.to === cur.to && c.s.arr < arr);
+}
+
+export function watchForBetter(ref?: string, together?: boolean): Answer {
+  const t = findTrip(ref);
+  if (!t) return NO_TRIP;
+  if (disruption(t).kind === "none" && !t.original) return { speech: `${statusSpeech(flightById(t.flightId))} Bluewren watches for earlier flights when it has moved you after a cancellation or long delay.` };
+  const wantTogether = together ?? t.travelers.length > 1;
+  const now = better(t, wantTogether);
+  const to = airport(flightById(t.flightId).to);
+  if (now.length) {
+    const c = now[0];
+    return { speech: `There's one already: ${label(c.f)} at ${when(c.s.dep, airport(c.f.from).tz)}${wantTogether && t.travelers.length > 1 ? ", seats together" : ""}. Want to switch to it?`, next: { tool: "rebook", args: { trip: t.conf, flight: String(c.f.number) } } };
+  }
+  const acct = load();
+  acct.trips.find((x) => x.conf === t.conf)!.watch = { together: wantTogether };
+  save(acct);
+  return { speech: `Okay. I'll watch for an earlier Bluewren flight to ${to.short}${wantTogether && t.travelers.length > 1 ? " with seats together" : ""} and tell you the moment one opens.`, data: { conf: t.conf, watching: true } };
+}
+
+/** After seats change: a watched trip with an earlier flight now gets an alert, once. */
+export function checkWatches(): number {
+  const acct = load();
+  let raised = 0;
+  for (const t of acct.trips.filter((x) => x.status === "active" && x.watch)) {
+    const c = better(t, t.watch!.together)[0];
+    if (!c) continue;
+    t.watch = undefined;
+    acct.alerts.push({ id: newId(), conf: t.conf, kind: "better", at: now().toISOString(), detail: c.f.id });
+    raised++;
+  }
+  if (raised) save(acct);
+  return raised;
+}
+
+/** For the demo: seats together open on the earliest flight a watched trip would rather take. */
+export function openSeats(): string | undefined {
+  const acct = load();
+  const t = acct.trips.find((x) => x.status === "active" && x.watch);
+  if (!t) return undefined;
+  const cur = flightById(t.flightId);
+  const arr = status(cur).arr;
+  const c = candidates(t).filter((x) => x.f.to === cur.to && x.s.arr < arr && !x.together)[0] ?? candidates({ ...t, travelers: ["me"] }).filter((x) => x.f.to === cur.to && x.s.arr < arr)[0];
+  if (!c) return undefined;
+  acct.ops[c.f.id] = { ...acct.ops[c.f.id], seats: "together" };
+  save(acct, { quiet: true });
+  checkWatches();
+  return c.f.id;
+}
+
+// ---------- help at the airport ----------
+
+export const ASSIST_NAME: Record<AssistKind, string> = { wheelchair: "wheelchair request", vision: "guide request", hearing: "text alerts", escort: "assistance request" };
+
+/** Help at the airport, free under the Air Carrier Access Act. */
+export function requestAssistance(ref: string | undefined, who: string | undefined, kind: AssistKind): Answer {
+  const t = findTrip(ref);
+  if (!t) return NO_TRIP;
+  const acct = load();
+  const w = (who ?? "me").toLowerCase().replace(/'s$/, "");
+  const p = /^(me|i|myself|my self|jordan)$/.test(w) ? acct.travelers.find((x) => x.self) : acct.travelers.find((x) => x.first.toLowerCase() === w || x.aliases?.some((a) => a === w || a.endsWith(w)));
+  if (!p || !t.travelers.includes(p.id)) return { speech: `${who ? cap(who) : "That person"} isn't on this booking. Who is the help for: ${names(t).join(" or ")}?`, needs: "input" };
+  const f = flightById(t.flightId);
+  const s = status(f);
+  const from = airport(f.from);
+  const to = airport(f.to);
+  const you = p.self ? "you" : p.first;
+  const them = p.self ? "you" : "them";
+  const what: Record<AssistKind, string> = {
+    wheelchair: `an agent with a wheelchair will come to ${you} wherever ${p.self ? "you are" : "they are"} in the ${from.city} airport and take ${them} to gate ${s.gate}, and another will be waiting at the aircraft door at ${to.short}`,
+    vision: `an agent will come to ${you} in the ${from.city} airport and guide ${them} to gate ${s.gate} and onto the plane, and another will meet ${them} at the aircraft door at ${to.short}`,
+    hearing: `gate changes and boarding calls for ${you} will come as texts in the Bluewren app, and the crew will know before boarding`,
+    escort: `an agent will come to ${you} in the ${from.city} airport and help ${them} to gate ${s.gate}, and another will meet ${them} at the aircraft door at ${to.short}`,
+  };
+  const acctTrip = acct.trips.find((x) => x.conf === t.conf)!;
+  acctTrip.assistance = [...(acctTrip.assistance ?? []).filter((a) => !(a.who === p.id && a.kind === kind)), { who: p.id, kind }];
+  save(acct);
+  return {
+    speech: `Done. On ${label(f)}, ${what[kind]}. It's free, and if your flight changes, the request moves with you.`,
+    data: tripView(acctTrip),
+  };
 }
