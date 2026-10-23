@@ -139,6 +139,12 @@ app.post("/demo/scene/:name", (req: Request, res: Response) => {
   res.json({ ok: true, now: now().toISOString() });
 });
 
+// Progress from the self-playing demo recording (web/director.ts).
+app.post("/demo/log", (req: Request, res: Response) => {
+  console.log(`[director] ${new Date().toTimeString().slice(0, 8)} ${String(req.body?.text ?? "").slice(0, 200)}`);
+  res.status(204).end();
+});
+
 // An operations event for the "watch for a better flight" story: seats together open on an earlier flight.
 app.post("/demo/event/seats", (_req, res) => void res.json({ opened: openSeats() ?? null }));
 
@@ -146,13 +152,13 @@ app.post("/demo/event/seats", (_req, res) => void res.json({ opened: openSeats()
 
 app.get("/voice/status", (_req, res) => void res.json(VOICE ? voiceState : { ready: false, failed: true }));
 app.post("/voice", async (req: Request, res: Response) => {
-  const { text, voice } = req.body ?? {};
+  const { text, voice, speed } = req.body ?? {};
   if (!VOICE || !voiceState.ready) return void res.status(503).end();
   if (typeof text !== "string" || !text.trim() || text.length > 600 || !VOICE_IDS.includes(voice)) return void res.status(400).end();
   let gone = false;
   res.on("close", () => (gone = !res.writableFinished));
   try {
-    const wav = await synthesize(text, voice, () => !gone);
+    const wav = await synthesize(text, voice, () => !gone, typeof speed === "number" ? Math.min(1.5, Math.max(0.7, speed)) : 1);
     if (wav) res.type("audio/wav").send(Buffer.from(wav));
     else res.status(204).end();
   } catch (e) {

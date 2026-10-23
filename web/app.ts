@@ -37,6 +37,8 @@ for (const e of EXAMPLES) {
 // ---------- conversation ----------
 
 let thinking: HTMLLIElement | undefined;
+/** Whether Alexa is working on something or talking, for the recorded demo (web/director.ts). */
+const live = { busy: false, speaking: false };
 let lastQuestion = false;
 let spokeLast = false;
 
@@ -83,10 +85,12 @@ events.onmessage = (m) => {
   const e = JSON.parse(m.data) as Event;
   switch (e.type) {
     case "user":
+      live.busy = true;
       clearThinking();
       add("u", e.text);
       break;
     case "thinking":
+      live.busy = true;
       clearThinking();
       thinking = add("t", e.text);
       break;
@@ -127,6 +131,7 @@ events.onmessage = (m) => {
       break;
     }
     case "idle":
+      live.busy = false;
       clearThinking();
       // After a spoken question, listen for the answer once Alexa has finished speaking.
       if (lastQuestion && spokeLast && converse.checked) listenAfterSpeech = true;
@@ -319,6 +324,7 @@ setupVoice({
   status: $("voiceStatus"),
   enabled: () => speakToggle.checked,
   onSpeaking: (on) => {
+    live.speaking = on;
     if (!on && listenAfterSpeech) {
       listenAfterSpeech = false;
       setTimeout(listen, 250);
@@ -361,3 +367,9 @@ function listen() {
 mic.onclick = listen;
 
 $("howBtn").onclick = () => $<HTMLDialogElement>("how").showModal();
+
+// ?record plays the demo video by itself (see web/director.ts).
+if (new URLSearchParams(location.search).has("record")) {
+  converse.checked = false;
+  void import("./director.js").then((d) => d.direct({ live, send, appFrame, input }));
+}

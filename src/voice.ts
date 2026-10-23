@@ -3,7 +3,7 @@
 // server; Alexa+ speaks with its own voice.
 import type { KokoroTTS } from "kokoro-js";
 
-export const VOICE_IDS = ["af_heart", "af_bella", "bf_emma", "am_michael", "bm_george"] as const;
+export const VOICE_IDS = ["af_heart", "af_bella", "bf_emma", "am_michael", "bm_george", "am_fenrir"] as const;
 
 let loading: Promise<KokoroTTS> | undefined;
 export const voiceState = { ready: false, failed: false };
@@ -25,11 +25,11 @@ export function loadVoice(): Promise<KokoroTTS> {
 // One sentence at a time; sentences of an answer the listener has interrupted are skipped.
 let queue: Promise<unknown> = Promise.resolve();
 
-export function synthesize(text: string, voice: string, wanted: () => boolean): Promise<ArrayBuffer | null> {
+export function synthesize(text: string, voice: string, wanted: () => boolean, speed = 1): Promise<ArrayBuffer | null> {
   const job = queue.then(async () => {
     if (!wanted()) return null;
     const tts = await loadVoice();
-    return (await tts.generate(text, { voice: voice as (typeof VOICE_IDS)[number] })).toWav();
+    return (await tts.generate(text, { voice: voice as (typeof VOICE_IDS)[number], speed })).toWav();
   });
   queue = job.catch(() => {});
   return job;

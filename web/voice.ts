@@ -27,6 +27,8 @@ const store = {
 };
 
 let voice: string = new URLSearchParams(location.search).get("voice") ?? store.get("bw.voice") ?? "af_heart";
+/** ?speed=1.15 speaks a little faster (used for the recorded demo). */
+const speed = Math.min(1.5, Math.max(0.7, Number(new URLSearchParams(location.search).get("speed")) || 1));
 let enabled = () => true;
 let onStatus: (text: string) => void = () => {};
 let onSpeaking: (on: boolean) => void = () => {};
@@ -119,7 +121,7 @@ async function watchNatural() {
 }
 
 function synthesize(text: string, signal: AbortSignal): Promise<ArrayBuffer | null> {
-  return fetch("/voice", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, voice }), signal })
+  return fetch("/voice", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, voice, speed }), signal })
     .then((r) => (r.status === 200 ? r.arrayBuffer() : null))
     .catch(() => null);
 }
@@ -144,9 +146,14 @@ function play(wav: ArrayBuffer): Promise<void> {
 // ---------- speaking ----------
 
 let turn = 0;
+/** Sentences still to say. Alexa's replies queue up; only the user (or a new scene) cuts them short. */
+let queued: string[] = [];
+let draining = false;
 
 export function stopSpeaking() {
   turn++;
+  queued = [];
+  draining = false;
   request?.abort();
   request = undefined;
   audio?.pause();
@@ -157,26 +164,35 @@ export function stopSpeaking() {
 
 export function speak(text: string) {
   if (!enabled()) return;
-  stopSpeaking();
   const parts = sentences(spoken(text));
-  const mine = turn;
-  if (!ready || voice === "browser") return speakWithBrowser(parts, mine);
+  if (!ready || voice === "browser") return speakWithBrowser(parts, turn);
+  queued.push(...parts);
+  if (!draining) void drain(turn);
+}
+
+async function drain(mine: number) {
+  draining = true;
+  // Speaking from the moment there's something to say, not only once the first sentence is ready.
+  onSpeaking(true);
   request = new AbortController();
   const signal = request.signal;
-  void (async () => {
-    // The next sentence is made while this one plays.
-    let next = synthesize(parts[0], signal);
-    for (let i = 0; i < parts.length; i++) {
-      const wav = await next;
-      if (mine !== turn) return;
-      if (!wav) return speakWithBrowser(parts.slice(i), mine);
-      if (i + 1 < parts.length) next = synthesize(parts[i + 1], signal);
-      onSpeaking(true);
-      await play(wav);
-      if (mine !== turn) return;
+  // The next sentence is made while this one plays.
+  let next: Promise<ArrayBuffer | null> | undefined = synthesize(queued.shift()!, signal);
+  while (next) {
+    const wav = await next;
+    if (mine !== turn) return;
+    if (!wav) {
+      draining = false;
+      return speakWithBrowser(queued.splice(0), mine);
     }
-    onSpeaking(false);
-  })();
+    next = queued.length ? synthesize(queued.shift()!, signal) : undefined;
+    onSpeaking(true);
+    await play(wav);
+    if (mine !== turn) return;
+    if (!next && queued.length) next = synthesize(queued.shift()!, signal);
+  }
+  draining = false;
+  onSpeaking(false);
 }
 
 /** Wires the voice picker and starts loading the natural voice in the background. */
@@ -189,6 +205,7 @@ export function setupVoice(opts: { picker: HTMLSelectElement; status: HTMLElemen
   opts.picker.onchange = () => {
     voice = opts.picker.value;
     store.set("bw.voice", voice);
+    stopSpeaking();
     speak("Hi! This is how I'll sound from now on.");
   };
   // Chrome lists its voices only after this event; read them once so the first answer has them.
