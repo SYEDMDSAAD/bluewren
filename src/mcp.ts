@@ -150,11 +150,12 @@ export function createServer(baseUrl: string): McpServer {
     "rebook",
     {
       title: "Rebook",
-      description: "Moves the whole booking to another flight, for free after a cancellation or long delay. The traveler approves it in the Bluewren app on their phone. Pick by option number from rebooking_options, or a flight number; with neither, the best option.",
+      description: "Moves the whole booking to another flight, for free after a cancellation or long delay. The traveler approves it in the Bluewren app on their phone. Pick by option number from rebooking_options, a flight number, or a departure time; with none, the best option.",
       inputSchema: {
         trip,
         option: z.number().int().optional().describe("Option number from the last rebooking_options"),
         flight: z.string().optional().describe("Flight number, e.g. 418"),
+        time: z.string().optional().describe("Departure time as the traveler said it, e.g. 3:45 pm or 6:30"),
         confirmation_id: z.string().optional().describe("Only for clients without elicitation: the id from the previous call, after the user said yes"),
       },
       annotations: { destructiveHint: false, idempotentHint: false },
@@ -167,7 +168,7 @@ export function createServer(baseUrl: string): McpServer {
         flight ??= trip;
         trip = undefined;
       }
-      const plan = held ?? planRebook(trip, a.option, flight);
+      const plan = held ?? planRebook(trip, a.option, flight, a.time);
       if ("speech" in plan) return reply(plan);
       const sum = rebookSummary(plan);
       if (!held && !modes().url && !modes().form) return reply({ speech: `${sum.speech} Shall I?`, needs: "confirmation", data: { confirmation_id: hold("rebook", plan) } });

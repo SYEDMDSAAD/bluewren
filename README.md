@@ -91,12 +91,14 @@ The request moves with the traveler when the flight changes. Voice itself helps 
 ```bash
 npm install
 npm start      # MCP server at http://localhost:8790/mcp, demo at http://localhost:8790/
-npm test       # rule edges + end-to-end over MCP (52 checks)
+npm test       # rule edges + end-to-end over MCP (54 checks)
 ```
 
 The demo page stands in for Alexa+. It is an MCP client that picks tools with a small local model ([Ollama](https://ollama.com), `qwen2.5-coder:7b` by default, set with `BW_MODEL`). It speaks with a natural voice (Kokoro), listens in Chrome, and shows the airline app on a phone. The panel on the right shows every MCP message.
 
 `npx tsx scripts/intent-check.ts` runs 31 everyday sentences through the local model. The latest run got 31 of 31 right with a median of 2.1 seconds on a laptop GPU. Those sentences were also used to tune the stand-in, so expect less on new phrasings; real Alexa+ does this part itself.
+
+`npx tsx scripts/stress-check.ts` plays 23 conversations through the demo the way the web page does, about 120 sentences in all, including nonsense, other airlines and cities, requests to ignore the rules, other languages and empty input. It prints every reply for reading and flags crashes, silence and error replies.
 
 ## Layout
 

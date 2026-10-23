@@ -252,14 +252,24 @@ export interface RebookPlan {
   together: boolean;
 }
 
-/** The flight the user picked: an option number from the last list, or a flight number. */
-export function planRebook(ref?: string, option?: number, flight?: string): RebookPlan | Answer {
+/** The flight the user picked: an option number from the last list, a flight number, or a departure time ("3:45 pm", "6:30"). */
+export function planRebook(ref?: string, option?: number, flight?: string, time?: string): RebookPlan | Answer {
   const t = findTrip(ref);
   if (!t) return NO_TRIP;
   if (disruption(t).kind === "none" && !t.original) return rebookingOptions(t.conf);
   const acct = load();
   let id: string | undefined;
-  if (option && acct.options?.conf === t.conf) id = acct.options.flights[option - 1];
+  // A time said out loud can't go stale the way an option number from an older list can, so it goes first.
+  const at = !flight ? time?.toLowerCase().match(/(\d{1,2})(?::(\d{2}))?\s*([ap])?/) : undefined;
+  if (at) {
+    const hm = `${Number(at[1])}:${at[2] ?? "00"} `;
+    id = candidates(t).find((c) => {
+      const dep = flightView(c.f).depLocal;
+      return dep.startsWith(hm) && (!at[3] || dep.endsWith(`${at[3]}m`));
+    })?.f.id;
+    if (!id) return { speech: `There's no Bluewren flight at ${time} with room for ${party(t)}. Want to hear the ones there are?`, next: { tool: "rebooking_options", args: { trip: t.conf } } };
+  }
+  if (!id && option && acct.options?.conf === t.conf) id = acct.options.flights[option - 1];
   if (!id && flight) {
     const n = Number(flight.match(/\d{3,4}/)?.[0]);
     id = candidates(t).find((c) => c.f.number === n)?.f.id;

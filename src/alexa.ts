@@ -71,7 +71,7 @@ send_text: text or tell someone (contact, message)
 book_ride: get an Uber, a ride, a taxi (place)
 move_meeting: move or reschedule my meeting
 find_hotel: find a hotel to pay for myself
-chat: greetings, thanks, anything else (reply: one short friendly sentence)
+chat: greetings, thanks, anything else (reply: one short friendly sentence; never make up Bluewren facts such as Wi-Fi, pets, prices or rules: say you don't have that from Bluewren)
 Rules: "the second one" = option 2. "next to my daughter", "sit together" = together true. Copy days as said ("tomorrow"). Flight numbers are 3 or 4 digits.`;
 }
 
@@ -132,7 +132,8 @@ export class Conversation {
     });
     client.setNotificationHandler(ResourceUpdatedNotificationSchema, async (n) => {
       // Changes made while Alexa is mid-request are its own doing (a rebooking, a refund), not news.
-      if (n.params.uri !== TRIPS || this.running || this.form || Date.now() < this.quietUntil) return;
+      // A page that has closed doesn't hear it either, or it would use up the alert meant for the one open now.
+      if (n.params.uri !== TRIPS || !this.listeners.size || this.running || this.form || Date.now() < this.quietUntil) return;
       this.emit({ type: "mcp", dir: "in", text: `notifications/resources/updated ${TRIPS}` });
       this.checkAlerts();
     });
@@ -224,6 +225,14 @@ export class Conversation {
       if (!this.nextOffer()) this.say(pending.kind === "offer" ? "Okay." : "Okay. Just ask if you need anything else.");
       return;
     }
+    // A bare yes or no when nothing was asked.
+    if (!pending && (YES.test(text) || NO.test(text)) && text.split(" ").length <= 3) {
+      this.history.push({ role: "user", content: text });
+      // "…a refund, or another flight. What would you like?" answered with "yes".
+      const last = [...this.history].reverse().find((m) => m.role === "assistant")?.content ?? "";
+      if (YES.test(text) && /refund/.test(last) && /flight/.test(last)) return this.say("Which would you like: the cash refund, or another flight?", { question: true });
+      return this.say(NO.test(text) ? "Okay. Just ask if you need anything else." : "I'm not sure what that's for. You can ask about your flight, other flights, a refund, your bag, or help for tonight.");
+    }
     this.offers = [];
 
     this.emit({ type: "thinking", text: "Thinking…" });
@@ -256,12 +265,14 @@ export class Conversation {
 
   /** A ride. With no clear destination it goes to the hotel Bluewren is paying for, asking Bluewren first if needed. */
   private async bookRide(args: Record<string, unknown>) {
-    const said = typeof args.place === "string" ? args.place.trim() : "";
+    // "an Uber", "a cab" is the ride, not where it goes.
+    const said = typeof args.place === "string" ? args.place.trim().replace(/^(an? |the )?(uber|cab|taxi|lyft|ride|car)$/i, "") : "";
     const toHotel = !said || /\b(hotel|inn|there|chicago|austin)\b/i.test(said);
     if (toHotel && !this.hotel) {
       if (this.pending?.kind === "tool" && this.pending.name === "stranded_help") this.pending = undefined;
       const r = await this.call("stranded_help", {});
-      if (r) this.respond("stranded_help", r, false, false);
+      // Only worth saying if it names a hotel; otherwise the question below says it all.
+      if (r && (r.data as { hotel?: unknown })?.hotel) this.respond("stranded_help", r, false, false);
     }
     if (toHotel && !this.hotel) return this.say("Where should the ride take you?");
     this.done.add("ride");
@@ -343,6 +354,7 @@ export class Conversation {
     if (name === "move_meeting") {
       const m = events.find((e) => e.kind === "meeting");
       if (!m) return this.say("You don't have any meetings coming up.");
+      if (this.done.has(`move:${m.title}`)) return this.say(`${m.title} is already moved to 2 pm tomorrow.`);
       this.done.add(`move:${m.title}`);
       return this.show(moveMeeting(m.title));
     }
@@ -373,15 +385,56 @@ export class Conversation {
     if (!res.ok) throw new Error(`Ollama ${res.status}: ${await res.text()}`);
     const j = JSON.parse(((await res.json()) as { message: { content: string } }).message.content) as Record<string, unknown>;
     const action = String(j.action ?? "");
-    if (action === "chat" || ![...MCP_ACTIONS, ...ALEXA_ACTIONS].includes(action)) return typeof j.reply === "string" && j.reply.trim() ? { say: j.reply.trim().slice(0, 300) } : undefined;
+    if (action === "chat" || ![...MCP_ACTIONS, ...ALEXA_ACTIONS].includes(action)) return { say: chatReply(text, j.reply) };
     const allowed = MCP_ACTIONS.includes(action) ? Object.keys(this.tools.find((t) => t.name === action)?.inputSchema.properties ?? {}) : ["contact", "message", "place"];
     const args = clean(Object.fromEntries(Object.entries(j).filter(([k]) => allowed.includes(k))));
     // A bag fee is only ever refunded, never "checked": that question is the refund itself.
     let name = action === "refund_eligibility" && /\bbag fee\b/i.test(text) ? "request_refund" : action;
     // Naming the time of a flight Alexa just listed picks it, whatever else the sentence asks.
     if (name !== "rebook" && !["flight_status", "my_trips"].includes(name) && optionAt(text, this.options)) name = "rebook";
-    return { name, args: ground(name, name === action ? args : {}, text, this.options) };
+    // "The Midway one", "that one" right after a list is a pick from it.
+    if (this.options.length && /\b(the [\w']+ one|that one|that flight)\b/i.test(text) && !/\b(another|other|different)\b/i.test(text)) name = "rebook";
+    const refusal = outOfLane(name, text);
+    if (refusal) return { say: refusal };
+    // An action the words don't support is the model guessing: a time or a flight means options, else ask.
+    if (!supported(name, text)) {
+      if (/\b(hotel|room|sleep|stay)\b/i.test(text)) return /\b(find|cheap|cheaper|book|another)\b/i.test(text) ? { name: "find_hotel", args: {} } : { name: "stranded_help", args: {} };
+      return /\b(flight|fly|\d{1,2}[: ]\d{2}|\d{1,2}\s*[ap]\.?m)\b/i.test(text) ? { name: "rebooking_options", args: {} } : { say: HELP };
+    }
+    const grounded = ground(name, name === action ? args : {}, text, this.options);
+    // "Put us on the 1:20" with no list of options read out yet: read them out rather than guess.
+    if (name === "rebook" && !grounded.option && !grounded.flight && !grounded.time) return { name: "rebooking_options", args: {} };
+    return { name, args: grounded };
   }
+}
+
+const HELP = "Sorry, I didn't catch that. You can ask about your flight, other flights, a refund, your bag, or help for tonight.";
+
+/** What the model said for small talk, unless it's a canned greeting for something that wasn't one. */
+function chatReply(text: string, reply: unknown): string {
+  const r = typeof reply === "string" ? reply.trim().slice(0, 300) : "";
+  if (!r || (/^(hello|hi|hey)\b/i.test(r) && !/\b(hello|hi|hey|good (morning|afternoon|evening))\b/i.test(text))) return HELP;
+  return r;
+}
+
+/** Things Bluewren can't do, said plainly instead of doing something else. */
+function outOfLane(name: string, text: string): string | undefined {
+  const t = text.toLowerCase();
+  if (/\b(delta|united|american airlines|southwest|jetblue|alaska airlines|spirit|frontier)\b/.test(t)) return "I can only change Bluewren flights. Bluewren can move you to another of its flights, or refund you if you'd rather not fly. Want to hear the options?";
+  if (/\b(dog|cat|pet|alone|unaccompanied|knife|weapon|liquids?|wi-?fi|upgrade|first class|carry-?on|baggage allowance)\b|how much (is|are|does) (a |my )?(checked )?(bag|luggage)/.test(t)) return "I don't have Bluewren's rules on that here; they're in the Bluewren app. I can help with your flight, other flights, a refund, your bag, or tonight's plans.";
+  if (/\b(speak|talk|connect|put me through)\b.*\b(human|person|agent|someone|representative|customer service)\b/.test(t)) return "You can chat with a Bluewren agent in the Bluewren app, or see one at the service desk. I can do most of what they can right here: rebook you, refund you, or sort out tonight.";
+  const city = t.match(/\b(?:fly|go|get|send|take)\b(?: \w+)? (?:to|into) (?!the\b|a\b|an\b)([a-z][a-z' ]+?)(?:\s+(?:instead|tomorrow|today|tonight|please|now|then)\b|[?.!,]|$)/)?.[1];
+  if (["rebook", "rebooking_options", "my_trips", "flight_status"].includes(name) && city && !/^(chicago|o'?hare|midway|austin|home|my|our|your|it|there|that)\b/.test(city)) return "Bluewren can move you to another flight on the same trip, but not to a different city. If you'd rather not go, you can take a full refund instead. Want to hear your options?";
+  return undefined;
+}
+
+/** The small model sometimes picks an action no word in the sentence asks for. */
+function supported(name: string, text: string): boolean {
+  const t = text.toLowerCase();
+  if (name === "send_text") return /\b(text|message|msg|tell|let \w+ know|send|sms|whatsapp)\b/.test(t);
+  if (name === "move_meeting") return /\b(meeting|calendar|appointment|reschedule)\b/.test(t);
+  if (name === "request_assistance") return /wheel ?chair|knee|leg|walk|mobility|blind|can'?t see|vision|sight|deaf|hear|escort|assist|help (me |us |him |her |them )?get(ting)? to/.test(t);
+  return true;
 }
 
 // "the second one" must not match "one": only ordinals, or a number after "option"/"number".
@@ -416,7 +469,9 @@ export function ground(action: string, args: Record<string, unknown>, text: stri
   if (action === "request_refund") a.what = /\bbag/.test(t) ? "bag_fee" : "ticket";
   if (action === "request_assistance") {
     a.kind = /wheel ?chair|can'?t walk|walking|knee|leg|mobility/.test(t) ? "wheelchair" : /\bblind|can'?t see|low vision|vision|sight/.test(t) ? "vision" : /\bdeaf|hard of hearing|can'?t hear|hearing/.test(t) ? "hearing" : "escort";
-    a.who = /\b(maya|my daughter|daughter|my kid)\b/.test(t) ? "Maya" : "me";
+    // Someone else named ("my dad") goes to Bluewren as said, and it asks who on the booking is meant.
+    const other = t.match(/\b(dad|father|mom|mother|wife|husband|son|grandma|grandpa|grandmother|grandfather|brother|sister|friend|partner)\b/)?.[1];
+    a.who = /\b(maya|my daughter|daughter|my kid)\b/.test(t) ? "Maya" : other ? cap(other) : "me";
   }
 
   if (action === "rebook") {
@@ -436,6 +491,10 @@ export function ground(action: string, args: Record<string, unknown>, text: stri
     const earliest = /\b(earliest|soonest|first available)\b/.test(t) ? 1 : undefined;
     const option = byTime?.option ?? byAirport?.option ?? earliest ?? ord ?? last;
     if (option) a.option = option;
+    // The time said goes too: Bluewren matches it to a departure, even when no list was read out.
+    const said = !num ? t.match(/\b(\d{1,2})(?:[: ]?(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)(?![a-z])/) ?? t.match(/\b(\d{1,2})[: ](\d{2})\b/) : undefined;
+    if (said) a.time = `${Number(said[1])}:${said[2] ?? "00"}${said[3] ? ` ${said[3][0]}m` : ""}`;
+    else delete a.time;
   }
   return a;
 }
@@ -444,3 +503,5 @@ export function ground(action: string, args: Record<string, unknown>, text: stri
 function clean(a: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(a ?? {}).filter(([, v]) => v !== "" && v !== null && v !== undefined && v !== 0 && !(Array.isArray(v) && !v.length)));
 }
+
+const cap = (s: string) => s[0].toUpperCase() + s.slice(1);

@@ -51,6 +51,16 @@ if ("speech" in crewPlan) throw new Error(crewPlan.speech);
 air.completeRebook(crewPlan);
 check("crew overnight: hotel covered", /a room at the Prairie Gate Inn/.test(air.strandedHelp().speech));
 
+// A time said out loud picks the flight, even after an earlier move left an old list behind
+setScene("home")();
+const first = air.planRebook(undefined, undefined, "418");
+if ("speech" in first) throw new Error(first.speech);
+air.completeRebook(first);
+const byTime = air.planRebook(undefined, 3, undefined, "1:20");
+check("\"the 1:20\" after moving: Bluewren 416, not a stale option 3", !("speech" in byTime) && byTime.flightId.startsWith("416-"), byTime);
+const noSuch = air.planRebook(undefined, undefined, undefined, "4:10 pm");
+check("a time with no flight: says so, offers the list", "speech" in noSuch && /no Bluewren flight at 4:10 pm/.test(noSuch.speech), noSuch);
+
 // The 12-hour bag line: yesterday's flight landed at 1:40 pm
 setScene("bag");
 const landed = new Date(air.flightView((await import("../src/air/schedule.js")).flightById(load().trips[0].flightId)).arr);
