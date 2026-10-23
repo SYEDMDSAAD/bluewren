@@ -100,7 +100,7 @@ export function blank(): Account {
       { id: "me", name: "Jordan Lee", first: "Jordan", self: true },
       { id: "maya", name: "Maya Lee", first: "Maya", age: 9, aliases: ["my daughter", "daughter", "my kid"] },
     ],
-    card: "Visa ending 1881",
+    card: "card ending 1881",
     trips: [],
     refunds: [],
     vouchers: [],

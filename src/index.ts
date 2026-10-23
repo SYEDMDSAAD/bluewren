@@ -65,7 +65,7 @@ app.get("/approve/:id", (req: Request, res: Response) => {
     : `<h1>${esc(a.title)}</h1>
        <div class="card">${a.lines.map((l) => `<div class="row">${esc(l)}</div>`).join("")}</div>
        <p class="muted small">Requested by Alexa on your Echo.</p>
-       <form method="post" action="/approve/${a.id}"><input type="hidden" name="outcome" value="approved"><button class="approve">Approve with Face ID</button></form>
+       <form method="post" action="/approve/${a.id}"><input type="hidden" name="outcome" value="approved"><button class="approve">Approve</button></form>
        <form method="post" action="/approve/${a.id}"><input type="hidden" name="outcome" value="declined"><button class="decline">Decline</button></form>`;
   res.send(appPage(a.title, body));
 });

@@ -1,4 +1,4 @@
-// Plays the demo video by itself: open /?record&speed=1.2&at=<epoch ms> in a full-screen browser
+// Plays the demo video by itself: open /?record&speed=1.3&at=<epoch ms> in a full-screen browser
 // and record the screen. A narrator explains, "Jordan" speaks their lines (typed into the box as they're
 // said), scenes are clicked and the phone's Approve button is tapped, each when Alexa has finished.
 
@@ -19,26 +19,17 @@ type Step =
 
 const STEPS: Step[] = [
   { card: "Bluewren Air on Alexa+", sub: "When your flight goes wrong, just talk." },
-  { vo: "About fourteen million people flying from U.S. airports had a flight cancelled last year. You're at the gate, bag on your shoulder, child by the hand, two hundred people in line, and the airline app is jammed. That's when you want to just talk." },
+  { vo: "Last year, about fourteen million people flying from U.S. airports had a flight cancelled. That's when you want to just talk." },
   { uncard: true },
-  { vo: "This is Bluewren Air on Alexa plus: a real MCP server, for a made-up airline. Alexa on the left, your phone in the middle, and every MCP message on the right." },
+  { vo: "This is Bluewren Air on Alexa plus: a real MCP server, for a made-up airline. It's seven thirty in the morning, and operations just cancelled our flight." },
   { scene: "Morning at home" },
   { you: "Put us on the 3:45, but tell me if an earlier flight with seats together opens." },
   { you: "Yes." },
-  { vo: "Now, seats open up on an earlier flight." },
+  { vo: "Hours later, seats open up on an earlier flight." },
   { seats: true },
   { you: "Yes." },
-  { vo: "Delayed nearly four hours? U.S. Department of Transportation rules make that a cash refund, not a voucher, and Bluewren says so." },
-  { scene: "At the gate" },
-  { you: "We'll skip it. Give us the refund." },
-  { you: "Yes." },
-  { vo: "In a storm, the airline doesn't owe you a hotel, so Alexa plus takes over with Expedia." },
-  { scene: "storm" },
-  { you: "Yes." },
-  { you: "Yes." },
-  { you: "Yes." },
   { spot: "aside.wire" },
-  { vo: "Under the hood: one self-hosted MCP server on the November 2025 spec. Twelve tools, a subscribable resource for proactive alerts, and form and URL elicitation, so nothing changes without your yes and a tap in the airline's app. It also handles late bags, gate changes and wheelchair requests. Texts, Expedia and the calendar are Alexa plus's side, simulated here." },
+  { vo: "Under the hood: one self-hosted MCP server on the November 2025 spec. Twelve tools, a subscribable resource so Alexa can speak first, and form and URL elicitation, so nothing changes without your yes and a tap in the airline's app. The same server explains cash refunds under U.S. transportation rules, sorts out hotels and meal vouchers, tracks late bags, and arranges wheelchairs." },
   { spot: null },
   { card: "Bluewren Air on Alexa+", sub: "When your flight goes wrong, just talk." },
   { vo: "Bluewren Air on Alexa plus. When your flight goes wrong, just talk." },
@@ -100,7 +91,7 @@ async function tap(el: HTMLElement, doc: Document = document) {
   const old = el.style.boxShadow;
   el.style.transition = "box-shadow .2s";
   el.style.boxShadow = "0 0 0 4px #ffcc33, 0 0 22px 6px #ffcc33aa";
-  await sleep(700);
+  await sleep(500);
   el.click();
   await sleep(300);
   el.style.boxShadow = old;
@@ -121,11 +112,11 @@ export async function direct({ live, send, appFrame, input }: Api) {
   const at = Number(params.get("at")) || 0;
   log(`voices ready; starting ${at ? `at ${new Date(at).toLocaleTimeString()}` : "now"}`);
   while (Date.now() < at) await sleep(50);
-  await sleep(1500);
+  await sleep(800);
 
   const approved = new Set<string>();
   /** Until Alexa has finished and stayed quiet a moment, tapping Approve on the phone when asked. */
-  async function settle(quietMs = 600) {
+  async function settle(quietMs = 400) {
     await sleep(700);
     let quiet = 0;
     for (let t = 0; t < 1200; t++) {
@@ -133,7 +124,7 @@ export async function direct({ live, send, appFrame, input }: Api) {
       const btn = doc?.querySelector<HTMLButtonElement>("button.approve");
       if (btn && !approved.has(appFrame.src) && !live.speaking) {
         approved.add(appFrame.src);
-        await sleep(600);
+        await sleep(250);
         await tap(btn, doc!);
         quiet = 0;
         continue;
@@ -174,14 +165,14 @@ export async function direct({ live, send, appFrame, input }: Api) {
       await tap(b);
       // Wait for the alert Alexa speaks first.
       for (let t = 0; t < 300 && !document.querySelector("#chat li.p"); t++) await sleep(100);
-      await settle(800);
+      await settle(500);
     } else if ("seats" in s) {
       const b = document.querySelector<HTMLButtonElement>("#sceneButtons button.event, button.event")!;
       log("seats open up");
       const before = document.querySelectorAll("#chat li.p").length;
       await tap(b);
       for (let t = 0; t < 300 && document.querySelectorAll("#chat li.p").length === before; t++) await sleep(100);
-      await settle(800);
+      await settle(500);
     } else if ("spot" in s) {
       document.querySelectorAll<HTMLElement>("[data-spot]").forEach((e) => ((e.style.boxShadow = ""), e.removeAttribute("data-spot")));
       const e = s.spot ? document.querySelector<HTMLElement>(s.spot) : null;
@@ -192,6 +183,6 @@ export async function direct({ live, send, appFrame, input }: Api) {
       }
     }
   }
-  await sleep(2500);
+  await sleep(1200);
   log("recording done");
 }

@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 /**
  * Approvals in the Bluewren app. Changing a ticket or refunding it is never done on a voice "yes"
  * alone: the MCP server asks the client to open this page (URL elicitation), and the traveler
- * approves there with Face ID, as they would in the airline's app. The demo page shows it in a phone.
+ * approves there, as they would in the airline's app. The demo page shows it in a phone.
  */
 export type Outcome = "approved" | "declined" | "expired";
 

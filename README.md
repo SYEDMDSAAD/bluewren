@@ -27,8 +27,8 @@ The demo page has buttons that play the airline's operations:
 | Morning at home | The 11:05 flight is cancelled (crew shortage) | Warns you before you leave; offers the first flight with seats together; rebooks on a phone tap; offers to text Mom |
 | At the gate | The 3:45 flight is delayed 3 h 40 min | Says a cash refund is owed; refunds on "yes" and a tap; meal vouchers; tells Mom you're not coming |
 | At the airport | Your gate moves | Tells you the new gate, how far it is and when boarding starts; a wheelchair or text alerts on request, which follow you if the flight changes |
-| Evening | The last flight is cancelled | Rebooks you onto tomorrow's 6:30 am flight; hotel, meals and ride covered; Uber to the hotel; texts Mom; moves tomorrow's 9 am meeting |
-| Evening, storm | Weather cancels the flight | Rebooks you for free, but says plainly that weather means no free hotel; finds and books one on Expedia on your yes |
+| Evening | The last flight is cancelled | Rebooks you onto tomorrow's 6:30 am flight; hotel, meals and ride covered; a ride to the hotel; texts Mom; moves tomorrow's 9 am meeting |
+| Evening, storm | Weather cancels the flight | Rebooks you for free, but says plainly that weather means no free hotel; finds and books one through Alexa+ on your yes |
 | Next morning | Your bag missed the flight | Says when the bag will be delivered; refunds the $35 bag fee |
 
 A **⚡ Seats open up** button plays one more event. Say "put us on the 3:45, but tell me if an earlier flight with seats together opens". Then press the button, and Alexa tells you about the 1:20 and switches you on a yes.
@@ -73,7 +73,7 @@ The request moves with the traveler when the flight changes. Voice itself helps 
 - A client that can't elicit gets a read-back and a one-time `confirmation_id`. Nothing happens until a second call carries it.
 - No card numbers or passwords are ever spoken.
 
-**Bluewren knows its lane.** It returns arrival times, airports and hotel details. Alexa+ uses them with its own services and partners: texting whoever is picking you up, an Uber to the hotel, moving a meeting, or Expedia when weather means the airline doesn't pay for a hotel.
+**Bluewren knows its lane.** It returns arrival times, airports and hotel details. Alexa+ uses them with its own services and partners: texting whoever is picking you up, a ride to the hotel, moving a meeting, or booking a hotel when weather means the airline doesn't pay for a hotel.
 
 ## What is real and what is simulated
 
@@ -83,7 +83,7 @@ The request moves with the traveler when the flight changes. Voice itself helps 
   - The DOT rules: 3 hours or more for domestic flights, a refund to a credit card within 7 business days, and a bag fee refund after 12 hours.
 - **Simulated:**
   - The airline, its timetable, seats, cancellations, vouchers and refunds. There is no public airline booking API; a real airline would connect its systems behind the same tools.
-  - Alexa+ itself: the demo page is a stand-in. Its messages, Uber, Expedia and calendar steps are labelled as simulated in the MCP panel.
+  - Alexa+ itself: the demo page is a stand-in. Its messages, rides, hotel booking and calendar steps are labelled as simulated in the MCP panel.
 - **Bluewren's policy:** free changes again after Bluewren has moved you; meal vouchers for waits of 3 hours or more, and a hotel and ride for an overnight stay, when the cause was within the airline's control (crew, mechanical) and not weather. It is modelled on the commitments U.S. airlines publish on the DOT's customer service dashboard.
 
 ## Run it
