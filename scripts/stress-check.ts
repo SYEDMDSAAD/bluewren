@@ -43,6 +43,9 @@ const CONVERSATIONS: [string, string[]][] = [
   ["weather", ["yes", "yes", "yes", "yes", "yes", "yes"]],
   ["weather", ["no", "why won't you pay for my hotel", "that's not fair, pay for it", "find me a cheaper hotel"]],
   ["bag", ["where's my bag", "I want my bag fee back", "yes", "what about my ticket refund", "my bag is broken too", "where is my refund"]],
+  // The lines in the demo video.
+  ["gate", ["We'll skip it, give us the refund", "yes", "yes"]],
+  ["boarding", ["I hurt my knee, can I get a wheelchair?"]],
   ["bag", ["", "   ", "a".repeat(400), "1", "0", "-5", "yes no yes no", "no yes"]],
 ];
 

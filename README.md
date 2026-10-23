@@ -98,7 +98,7 @@ The demo page stands in for Alexa+. It is an MCP client that picks tools with a 
 
 `npx tsx scripts/intent-check.ts` runs 31 everyday sentences through the local model. The latest run got 31 of 31 right with a median of 2.1 seconds on a laptop GPU. Those sentences were also used to tune the stand-in, so expect less on new phrasings; real Alexa+ does this part itself.
 
-`npx tsx scripts/stress-check.ts` plays 23 conversations through the demo the way the web page does, about 120 sentences in all, including nonsense, other airlines and cities, requests to ignore the rules, other languages and empty input. It prints every reply for reading and flags crashes, silence and error replies.
+`npx tsx scripts/stress-check.ts` plays 25 conversations through the demo the way the web page does, about 120 sentences in all, including nonsense, other airlines and cities, requests to ignore the rules, other languages and empty input. It prints every reply for reading and flags crashes, silence and error replies.
 
 ## Layout
 
