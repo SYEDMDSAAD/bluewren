@@ -4,6 +4,8 @@ Bluewren is a self-hosted **MCP server** (spec 2025-11-25, Streamable HTTP) that
 
 Bluewren Air is a made-up airline.
 
+**Demo video (3 min):** https://www.youtube.com/watch?v=FfZz1o_-x-c
+
 > 🔔 **Alexa (7:30 am, in the kitchen):** "Heads up, Jordan. Your 11:05 am flight to Chicago today, Bluewren 412, was cancelled because of a crew shortage. The best option is Bluewren 418 at 3:45 pm today with seats together, landing at O'Hare at 6:20 pm. Moving is free. Want me to move you and Maya to it, or hear the other options?"
 > **You:** "Yes." *(Approve the change in the Bluewren app on your phone.)*
 > **Alexa:** "Done. You and Maya are on Bluewren 418 at 3:45 pm today, seats 14A and 14B… Mom is picking you up. Want me to text Mom your new arrival time?"
